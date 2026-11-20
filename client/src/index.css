@@ -148,9 +148,10 @@ a:hover { color: var(--thistle-500); }
 }
 .nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
 .nav-item.active {
-  background: linear-gradient(90deg, rgba(139,83,172,0.35), rgba(139,83,172,0.16));
-  color: #fff; box-shadow: inset 2.5px 0 0 var(--petal-400);
+  background: rgba(163,117,189,0.32);
+  color: #fff; font-weight: 600;
 }
+.nav-item.active:hover { background: rgba(163,117,189,0.42); }
 .nav-item .ico { width: 20px; text-align: center; font-size: 14px; opacity: 0.9; flex-shrink: 0; }
 .nav-item .count {
   margin-left: auto; background: var(--petal-500); color: #fff; font-size: 10.5px; font-weight: 700;
@@ -256,24 +257,24 @@ a:hover { color: var(--thistle-500); }
 .card-hover:hover { box-shadow: var(--shadow-lg); border-color: var(--thistle-200); }
 
 .stat-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); border: 1px solid rgba(36, 23, 48, 0.07); border-radius: var(--radius);
   padding: 14px 16px; box-shadow: var(--shadow); position: relative; overflow: hidden;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease; cursor: default;
+  transition: box-shadow 0.15s ease, transform 0.15s ease; cursor: default;
 }
 .stat-card.clickable { cursor: pointer; }
-.stat-card.clickable:hover { box-shadow: var(--shadow-lg); border-color: var(--thistle-300); }
-.stat-card .label { font-size: 11.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px; display: flex; align-items: center; gap: 7px; }
+.stat-card.clickable:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.stat-card .label { font-size: 11.5px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.4px; display: flex; align-items: center; gap: 7px; }
 .stat-card .label .s-ico {
   width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px; flex-shrink: 0;
+  font-size: 13px; flex-shrink: 0; background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 2px rgba(56, 33, 69, 0.08);
 }
 .stat-card .value { font-size: 25px; font-weight: 800; margin-top: 7px; color: var(--text); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .stat-card .delta { font-size: 11.5px; margin-top: 4px; font-weight: 600; }
 .stat-card .delta.up { color: var(--success); }
 .stat-card .delta.down { color: var(--danger); }
 .stat-card .delta.flat { color: var(--text-3); }
-.stat-card .foot { font-size: 11px; color: var(--text-3); margin-top: 5px; }
-.stat-card .strip { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.stat-card .foot { font-size: 11px; color: var(--text-2); opacity: 0.8; margin-top: 5px; }
 
 /* ==========================================================================
    Buttons

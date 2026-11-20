@@ -124,16 +124,25 @@ export function PageHead({ backTo, backLabel = 'Back', title, sub, actions, chil
 }
 
 // ---------- stat card ----------
+// `strip` is kept as the accent color (call sites unchanged) but now tints the
+// whole card with a soft pastel instead of drawing a colored border on top.
 export function StatCard({ label, value, delta, icon, strip, onClick, foot }) {
+  const iconIsObject = icon && typeof icon === 'object'
+  const accent = strip || (iconIsObject ? icon.color : null)
+  const pastel = typeof accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(accent) ? accent + '1a' : null
   return (
     <div
       className={cx('stat-card', onClick && 'clickable')}
+      style={pastel ? { background: pastel } : undefined}
       onClick={onClick}
       title={onClick ? 'Click to view details' : undefined}
     >
-      {strip && <div className="strip" style={{ background: strip }} />}
       <div className="label">
-        {icon && <span className="s-ico" style={{ background: icon.soft, color: icon.color }}>{icon.glyph}</span>}
+        {icon && (
+          <span className="s-ico" style={{ color: iconIsObject ? icon.color : 'var(--primary-strong)' }}>
+            {iconIsObject ? icon.glyph : icon}
+          </span>
+        )}
         {label}
       </div>
       <div className="value">{value}</div>

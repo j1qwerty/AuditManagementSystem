@@ -54,10 +54,10 @@ export default function Integrations() {
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Configured integrations" value={data.integrations.length} icon="⇄" accent />
-        <StatCard label="Connected" value={data.integrations.filter((i) => i.status === 'Connected').length} icon="✓" />
-        <StatCard label="Errors" value={data.integrations.filter((i) => i.status === 'Error').length} icon="⚠" />
-        <StatCard label="Records synced (PFMS)" value={data.integrations.find((i) => i.id === 'int1') ? data.integrations.find((i) => i.id === 'int1').recordsSynced : 0} icon="⤓" />
+        <StatCard label="Configured integrations" value={data.integrations.length} icon="⇄" strip="#8b53ac" />
+        <StatCard label="Connected" value={data.integrations.filter((i) => i.status === 'Connected').length} icon="✓" strip="#0f9d6e" />
+        <StatCard label="Errors" value={data.integrations.filter((i) => i.status === 'Error').length} icon="⚠" strip="#e0364f" />
+        <StatCard label="Records synced (PFMS)" value={data.integrations.find((i) => i.id === 'int1') ? data.integrations.find((i) => i.id === 'int1').recordsSynced : 0} icon="⤓" strip="#0488fb" />
       </div>
 
       {data.integrations.length === 0 && <Empty icon="⇄" title="No integrations configured" />}
