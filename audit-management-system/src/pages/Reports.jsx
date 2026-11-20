@@ -1,0 +1,436 @@
+// Reports - report registry with draft → review → approve → final workflow,
+// template management with basic customisation, and PDF/Word/CSV export.
+import { useMemo, useState, useEffect } from 'react'
+import { useData } from '../context/DataContext'
+import { navigate, getQuery } from '../lib/router'
+import {
+  Badge, DataTable, PageHead, Modal, Tabs, StatCard, ConfirmDialog, InfoTip, Empty, SectionTitle
+} from '../components/ui'
+import { uid, fmtDate, fmtDateTime } from '../lib/utils'
+import { printDocument, exportWord, tableHTML } from '../lib/exporters'
+
+const STATUS_FLOW = ['Draft', 'In Review', 'Approved', 'Final']
+
+export default function Reports() {
+  const { data, save, remove, currentUser, notify, can, toast } = useData()
+  const [tab, setTab] = useState(getQuery().get('tab') === 'generate' ? 'reports' : (getQuery().get('tab') || 'reports'))
+  const [generateOpen, setGenerateOpen] = useState(getQuery().get('tab') === 'generate')
+  const [viewReport, setViewReport] = useState(null)
+  const [editTemplate, setEditTemplate] = useState(null)
+  const [confirmDel, setConfirmDel] = useState(null)
+  const [statusChange, setStatusChange] = useState(null)
+  const [remarks, setRemarks] = useState('')
+
+  const caoIds = data.users.filter((u) => u.role === 'cao').map((u) => u.id)
+  const directorIds = data.users.filter((u) => u.role === 'director').map((u) => u.id)
+  const deptName = (id) => (data.departments.find((d) => d.id === id) || {}).name || '—'
+
+  const generate = async (form) => {
+    const audit = data.audits.find((a) => a.id === form.auditId)
+    const tpl = data.templates.find((t) => t.id === form.templateId)
+    if (!audit || !tpl) return
+    const seq = data.reports.length + 1
+    const rec = {
+      id: uid('r'), title: form.title || `${tpl.type} Report — ${audit.code}`, templateId: tpl.id, templateName: tpl.name,
+      auditId: audit.id, departmentId: audit.departmentId, status: 'Draft',
+      generatedBy: currentUser.id, generatedByName: currentUser.name,
+      generatedAt: new Date().toISOString(), approvedBy: null, approvedAt: null, version: 1,
+      summary: form.summary || `Report generated from the "${tpl.name}" template covering ${audit.code}.`,
+      history: [{ action: 'Draft generated', by: currentUser.name, date: new Date().toISOString(), notes: '' }]
+    }
+    await save('reports', rec, { logAction: 'Generated report', logDetail: rec.title })
+    setGenerateOpen(false)
+    toast('Report generated as draft')
+    setViewReport(rec)
+  }
+
+  const saveTemplate = async (form) => {
+    const exists = !!form.id
+    const rec = {
+      id: exists ? form.id : uid('tpl'),
+      name: form.name, description: form.description, type: form.type,
+      sections: form.sections, accent: form.accent, footer: form.footer,
+      showCover: form.showCover, showTOC: form.showTOC
+    }
+    await save('templates', rec, { logAction: exists ? 'Updated report template' : 'Created report template', logDetail: form.name })
+    setEditTemplate(null)
+    toast(exists ? 'Template updated' : 'Template created')
+  }
+
+  const applyStatus = async () => {
+    const { report, newStatus } = statusChange
+    const upd = {
+      ...report, status: newStatus,
+      approvedBy: ['Approved', 'Final'].includes(newStatus) ? `${currentUser.name} (${currentUser.designation})` : report.approvedBy,
+      approvedAt: ['Approved', 'Final'].includes(newStatus) ? new Date().toISOString() : report.approvedAt,
+      history: [...(report.history || []), { action: `Marked ${newStatus}`, by: currentUser.name, date: new Date().toISOString(), notes: remarks }]
+    }
+    await save('reports', upd, { logAction: `Report marked ${newStatus}`, logDetail: report.title, logRemarks: remarks })
+    await notify([...caoIds, ...directorIds].filter((x) => x !== currentUser.id), 'Report', `Report ${newStatus.toLowerCase()} — ${report.title}`, remarks || '', '#/reports', remarks)
+    setStatusChange(null); setRemarks(''); setViewReport(null)
+    toast(`Report marked ${newStatus}`)
+  }
+
+  const reportBody = (r) => {
+    const audit = data.audits.find((a) => a.id === r.auditId) || {}
+    const tpl = data.templates.find((t) => t.id === r.templateId) || { sections: [] }
+    const findings = data.findings.filter((f) => f.auditId === r.auditId)
+    const obs = data.observations.filter((o) => o.auditId === r.auditId)
+    const accent = tpl.accent || '#8b53ac'
+    const head = `<div style="border-left:4px solid ${accent};padding-left:10px;margin-bottom:6px">
+      <h1 style="color:${accent};margin:0">${r.title}</h1>
+      <div class="meta">${audit.code || ''} · ${deptName(r.departmentId)} · FY ${audit.fiscalYear || ''} · Status: ${r.status} · v${r.version}</div></div>`
+    const sectionHtml = {
+      'Header & Audit Reference': tableHTML(['Field', 'Value'], [['Report', r.title], ['Audit', `${audit.code} — ${audit.title || ''}`], ['Department', deptName(r.departmentId)], ['Generated by', `${r.generatedByName} · ${fmtDate(r.generatedAt)}`]]),
+      'Introduction & Background': `<p>${audit.objectives || ''}</p>`,
+      'Objectives & Scope': `<p><b>Objectives.</b> ${audit.objectives || ''}</p><p><b>Scope.</b> ${audit.scope || ''}</p>`,
+      'Methodology': '<p>Samples were selected using risk-based judgemental sampling. Evidence was obtained from departmental records, treasury reconciliations and third-party confirmations, and documented in standardised work papers.</p>',
+      'Findings & Analysis': tableHTML(['#', 'Finding', 'Severity', 'Status'], findings.map((f, i) => [i + 1, f.title, f.severity, f.status])),
+      'Department Responses': (findings.flatMap((f) => f.responses || []).map((x) => `<p><b>${x.by}:</b> ${x.text}</p>`).join('') || '<p>No responses received yet.</p>'),
+      'Recommendations': '<ul>' + findings.map((f) => `<li>Address <b>${f.title}</b> — comply with ${f.category} requirements and submit compliance certificates.</li>`).join('') + '</ul>',
+      'Annexure: Checklist Status': tableHTML(['Area', 'Item', 'Status'], (audit.checklist || []).slice(0, 15).map((c) => [c.category, c.item, c.status])),
+      'Compliance Summary': `<p>${obs.filter((o) => o.status === 'Resolved').length} of ${obs.length} observations resolved.</p>`,
+      'Observation-wise Status': tableHTML(['Observation', 'Requirement', 'Status', 'Due'], obs.map((o) => [o.title, o.requirement, o.status, fmtDate(o.dueDate)])),
+      'Ageing Analysis': tableHTML(['Observation', 'Due', 'Days'], obs.filter((o) => o.status !== 'Resolved').map((o) => [o.title, fmtDate(o.dueDate), -daysFrom(o.dueDate)])),
+      'Escalations': (obs.filter((o) => o.escalationLevel > 0).length ? tableHTML(['Observation', 'Level', 'Escalated to'], obs.filter((o) => o.escalationLevel > 0).map((o) => [o.title, `Level ${o.escalationLevel}`, o.escalatedTo || ''])) : '<p>No escalations.</p>'),
+      'Benchmark Scores': tableHTML(['Department', 'Open findings', 'Resolved observations'], data.departments.slice(0, 6).map((d) => [d.name, data.findings.filter((f) => f.departmentId === d.id && !['Resolved', 'Closed'].includes(f.status)).length, data.observations.filter((o) => o.departmentId === d.id && o.status === 'Resolved').length])),
+      'Trend Analysis': '<p>Findings density and compliance rates have been trending as per the analytics module; see the Analytics section for charts.</p>',
+      'Risk Ratings': tableHTML(['Department', 'Risk score'], data.audits.slice(0, 6).map((a) => [a.code, a.riskScore])),
+      'Recommended Audit Plan': '<p>High-risk departments identified in the risk assessment should be prioritised in the next annual plan.</p>',
+      'Plan Overview': tableHTML(['Audit', 'Type', 'Department', 'Status'], data.audits.slice(0, 10).map((a) => [a.code, a.type, deptName(a.departmentId), a.status])),
+      'Coverage by Department': tableHTML(['Department', 'Audits'], data.departments.map((d) => [d.name, data.audits.filter((a) => a.departmentId === d.id).length])),
+      'Resource Allocation': tableHTML(['Lead', 'Active audits'], Array.from(new Set(data.audits.map((a) => a.leadAuditorName).filter(Boolean))).slice(0, 8).map((n) => [n, data.audits.filter((a) => a.leadAuditorName === n).length])),
+      'Risk-Based Selection Rationale': '<p>Audits were selected using the department risk score — unresolved findings, compliance posture, budget exposure and time since last audit.</p>'
+    }
+    const toc = tpl.showTOC ? `<h2>Contents</h2><ul>${tpl.sections.map((s, i) => `<li>${i + 1}. ${s}</li>`).join('')}</ul>` : ''
+    return head + toc + tpl.sections.map((s, i) => `<h2>${i + 1}. ${s}</h2>${sectionHtml[s] || '<p>—</p>'}`).join('') +
+      `<div class="box"><b>${tpl.footer || ''}</b><br/>Generated ${fmtDateTime(new Date().toISOString())} by ${currentUser.name}</div>`
+  }
+
+  const exportPdf = (r) => printDocument(r.title, reportBody(r))
+  const exportDoc = (r) => exportWord(r.title.replace(/[^\w -]/g, ''), r.title, reportBody(r))
+
+  const tabs = [
+    { key: 'reports', label: 'Reports', count: data.reports.length },
+    { key: 'templates', label: 'Templates', count: data.templates.length }
+  ]
+
+  return (
+    <div>
+      <PageHead
+        title="Reports"
+        sub="Generate, review and issue audit reports from customisable templates"
+        actions={can('report.create') ? <button className="btn btn-primary" onClick={() => setGenerateOpen(true)}>+ Generate Report</button> : null}
+      />
+      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'reports' && (
+        <div>
+          <div className="grid grid-4 mb-3">
+            <StatCard label="All Reports" value={data.reports.length} strip="#8b53ac" foot="in the registry" />
+            <StatCard label="Drafts" value={data.reports.filter((r) => r.status === 'Draft').length} strip="#8d7f9a" />
+            <StatCard label="In Review" value={data.reports.filter((r) => r.status === 'In Review').length} strip="#d97706" />
+            <StatCard label="Issued (Final)" value={data.reports.filter((r) => r.status === 'Final').length} strip="#0f9d6e" />
+          </div>
+          <DataTable
+            rows={data.reports}
+            columns={[
+              {
+                key: 'title', label: 'Report', sortable: true,
+                render: (r) => (
+                  <div style={{ maxWidth: 320 }}>
+                    <div className="cell-strong ellipsis" title={r.title}>{r.title}</div>
+                    <div className="cell-sub">{r.templateName} · v{r.version} · {deptName(r.departmentId)}</div>
+                  </div>
+                )
+              },
+              { key: 'status', label: 'Status', sortable: true, render: (r) => <Badge kind={r.status}>{r.status}</Badge> },
+              { key: 'generatedByName', label: 'Generated By', sortable: true },
+              { key: 'generatedAt', label: 'Generated', sortable: true, sort: (r) => r.generatedAt, render: (r) => <span className="small nowrap">{fmtDate(r.generatedAt)}</span> },
+              { key: 'approvedBy', label: 'Approved By', sortable: true, render: (r) => r.approvedBy || '—' },
+              {
+                key: '__actions', label: '', render: (r) => (
+                  <div className="row-actions">
+                    <button className="btn-icon" title="Open report" onClick={() => setViewReport(r)}>👁</button>
+                    <button className="btn-icon" title="Export PDF (print)" onClick={() => exportPdf(r)}>⇩</button>
+                    <button className="btn-icon" title="Export Word" onClick={() => exportDoc(r)}>⇩</button>
+                    {can('report.approve') && r.status === 'Draft' && <button className="btn-icon" title="Send for review" onClick={() => { setStatusChange({ report: r, newStatus: 'In Review' }); setRemarks('') }}>➤</button>}
+                    {can('report.approve') && r.status === 'In Review' && <button className="btn-icon" title="Approve" onClick={() => { setStatusChange({ report: r, newStatus: 'Approved' }); setRemarks('') }}>✓</button>}
+                    {can('report.approve') && r.status === 'Approved' && <button className="btn-icon" title="Mark final" onClick={() => { setStatusChange({ report: r, newStatus: 'Final' }); setRemarks('') }}>✓</button>}
+                    {can('report.create') && <button className="btn-icon danger" title="Delete" onClick={() => setConfirmDel(r)}>🗑</button>}
+                  </div>
+                )
+              }
+            ]}
+            searchKeys={['title', 'templateName', 'status', 'generatedByName', (r) => deptName(r.departmentId)]}
+            searchPlaceholder="Search reports…"
+            rowClick={(r) => setViewReport(r)}
+            csvName="reports"
+            emptyTitle="No reports yet"
+            emptySub="Generate a report from any completed audit."
+          />
+        </div>
+      )}
+
+      {tab === 'templates' && (
+        <div>
+          <div className="flex-between mb-2">
+            <div className="muted small">Templates define the sections and styling used when generating reports. <InfoTip text="Customise sections, accent colour, footer text and cover options. Changes apply to newly generated reports." /></div>
+            {can('report.template') && <button className="btn btn-primary" onClick={() => setEditTemplate({ new: true })}>+ New Template</button>}
+          </div>
+          <div className="grid grid-3">
+            {data.templates.map((t) => (
+              <div key={t.id} className="card card-hover">
+                <div style={{ height: 4, background: t.accent || '#8b53ac' }} />
+                <div className="card-pad">
+                  <div className="flex-between">
+                    <h3 style={{ fontSize: 14.5 }}>{t.name}</h3>
+                    <span className="tag">{t.type}</span>
+                  </div>
+                  <p className="muted small" style={{ minHeight: 34 }}>{t.description}</p>
+                  <div className="flex wrap mb-2" style={{ gap: 5 }}>
+                    {t.sections.slice(0, 4).map((s, i) => <span key={i} className="tag" style={{ background: 'var(--surface-2)', color: 'var(--text-3)', borderColor: 'var(--border)' }}>{s}</span>)}
+                    {t.sections.length > 4 && <span className="muted tiny" style={{ alignSelf: 'center' }}>+{t.sections.length - 4} more</span>}
+                  </div>
+                  <div className="flex-between">
+                    <span className="muted tiny">{t.showCover ? 'Cover page' : 'No cover'} · {t.showTOC ? 'with contents' : 'no contents'}</span>
+                    {can('report.template') && (
+                      <span className="flex" style={{ gap: 5 }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setEditTemplate(t)}>✎ Edit</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setConfirmDel({ ...t, isTemplate: true })}>Delete</button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* generate modal */}
+      {generateOpen && (
+        <GenerateModal
+          data={data} onClose={() => setGenerateOpen(false)} onSave={generate}
+        />
+      )}
+
+      {/* view report */}
+      <Modal open={!!viewReport} onClose={() => setViewReport(null)} title={viewReport ? viewReport.title : ''} sub={viewReport ? `${viewReport.templateName} · v${viewReport.version} · ${viewReport.status}` : ''} size="lg">
+        {viewReport && (
+          <div>
+            <div className="flex mb-2" style={{ gap: 8 }}>
+              <Badge kind={viewReport.status}>{viewReport.status}</Badge>
+              <span className="tag">{viewReport.templateName}</span>
+            </div>
+            <p className="small" style={{ color: 'var(--text-2)' }}>{viewReport.summary}</p>
+            <div className="grid grid-3 mb-2">
+              <div><span className="muted tiny">GENERATED</span><div className="small bold">{viewReport.generatedByName} · {fmtDate(viewReport.generatedAt)}</div></div>
+              <div><span className="muted tiny">APPROVED</span><div className="small bold">{viewReport.approvedBy || '—'}</div></div>
+              <div><span className="muted tiny">AUDIT</span><div className="link small" onClick={() => navigate(`/audit/${viewReport.auditId}`)}>open audit ↗</div></div>
+            </div>
+            <SectionTitle>Workflow History</SectionTitle>
+            <div className="timeline">
+              {(viewReport.history || []).map((h, i) => (
+                <div key={i} className="tl-item">
+                  <span className="tl-dot" />
+                  <div className="tl-title">{h.action}</div>
+                  <div className="tl-meta">{h.by} · {fmtDateTime(h.date)}{h.notes ? ` — ${h.notes}` : ''}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex mt-3" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={() => exportPdf(viewReport)}>⇩ Export PDF</button>
+              <button className="btn btn-secondary" onClick={() => exportDoc(viewReport)}>⇩ Export Word</button>
+              {can('report.approve') && viewReport.status === 'Draft' && <button className="btn btn-secondary" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'In Review' }); setRemarks('') }}>➤ Send for Review</button>}
+              {can('report.approve') && viewReport.status === 'In Review' && <button className="btn btn-success" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'Approved' }); setRemarks('') }}>✓ Approve</button>}
+              {can('report.approve') && viewReport.status === 'Approved' && <button className="btn btn-success" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'Final' }); setRemarks('') }}>✓ Mark Final & Issue</button>}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* status change */}
+      <Modal
+        open={!!statusChange} onClose={() => setStatusChange(null)}
+        title={statusChange ? `Mark as ${statusChange.newStatus}` : ''}
+        sub={statusChange ? statusChange.report.title : ''}
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setStatusChange(null)}>Cancel</button>
+            <button className="btn btn-primary" disabled={statusChange && ['Approved', 'Final'].includes(statusChange.newStatus) && !remarks.trim()} onClick={applyStatus}>Confirm</button>
+          </>
+        }
+      >
+        <div className="field">
+          <label>Remarks {statusChange && ['Approved', 'Final'].includes(statusChange.newStatus) ? <span className="req">*</span> : ''}</label>
+          <textarea className="textarea wide" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Included in the workflow history and notifications" />
+        </div>
+      </Modal>
+
+      {/* template editor */}
+      {editTemplate && (
+        <TemplateModal
+          template={editTemplate.new ? null : editTemplate}
+          onClose={() => setEditTemplate(null)}
+          onSave={saveTemplate}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!confirmDel} onClose={() => setConfirmDel(null)}
+        title={confirmDel && confirmDel.isTemplate ? 'Delete template' : 'Delete report'}
+        danger confirmLabel="Delete"
+        message={confirmDel && confirmDel.isTemplate ? `Delete the "${confirmDel.name}" template? Existing reports keep their content.` : `Delete "${confirmDel ? confirmDel.title : ''}"? This cannot be undone.`}
+        onConfirm={async () => {
+          if (confirmDel.isTemplate) await remove('templates', confirmDel.id, { logAction: 'Deleted report template', logDetail: confirmDel.name })
+          else await remove('reports', confirmDel.id, { logAction: 'Deleted report', logDetail: confirmDel.title })
+          setConfirmDel(null); setViewReport(null)
+          toast('Deleted')
+        }}
+      />
+    </div>
+  )
+}
+
+function daysFrom(d) {
+  return Math.round((new Date(d) - new Date()) / 86400000)
+}
+
+function GenerateModal({ data, onClose, onSave }) {
+  const [f, setF] = useState(() => ({
+    auditId: (data.audits[0] || {}).id || '',
+    templateId: (data.templates[0] || {}).id || '',
+    title: '',
+    summary: ''
+  }))
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
+  const audit = data.audits.find((a) => a.id === f.auditId)
+  const tpl = data.templates.find((t) => t.id === f.templateId)
+  return (
+    <Modal
+      open onClose={onClose} title="Generate Report" sub="Pick an audit and a template - a draft is created that you can export"
+      size="md"
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!f.auditId || !f.templateId} onClick={() => onSave(f)}>Generate Draft</button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <div className="field span-all">
+          <label>Audit <span className="req">*</span></label>
+          <select className="select" value={f.auditId} onChange={(e) => set('auditId', e.target.value)}>
+            {data.audits.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.title}</option>)}
+          </select>
+        </div>
+        <div className="field span-all">
+          <label>Template <span className="req">*</span></label>
+          <select className="select" value={f.templateId} onChange={(e) => set('templateId', e.target.value)}>
+            {data.templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.type})</option>)}
+          </select>
+          {tpl && <span className="help">{tpl.sections.length} sections · {tpl.showCover ? 'cover page · ' : ''}{tpl.footer}</span>}
+        </div>
+        <div className="field span-all">
+          <label>Report title (optional)</label>
+          <input className="input" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder={audit && tpl ? `${tpl.type} Report — ${audit.code}` : ''} />
+        </div>
+        <div className="field span-all">
+          <label>Summary note</label>
+          <textarea className="textarea" value={f.summary} onChange={(e) => set('summary', e.target.value)} placeholder="One-paragraph summary shown in the registry…" />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function TemplateModal({ template, onClose, onSave }) {
+  const isNew = !template
+  const [f, setF] = useState(() => ({
+    id: template ? template.id : null,
+    name: template ? template.name : '',
+    description: template ? template.description : '',
+    type: template ? template.type : 'Detailed',
+    sections: template ? [...template.sections] : ['Header & Audit Reference', 'Objectives & Scope', 'Findings & Analysis', 'Recommendations'],
+    accent: template ? template.accent : '#8b53ac',
+    footer: template ? template.footer : 'Audit & Compliance Wing - Confidential',
+    showCover: template ? template.showCover : true,
+    showTOC: template ? template.showTOC : false
+  }))
+  const [newSection, setNewSection] = useState('')
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
+  const move = (i, dir) => {
+    const s = [...f.sections]
+    const j = i + dir
+    if (j < 0 || j >= s.length) return
+    ;[s[i], s[j]] = [s[j], s[i]]
+    set('sections', s)
+  }
+  return (
+    <Modal
+      open onClose={onClose} title={isNew ? 'New Report Template' : `Edit Template — ${template.name}`} size="md"
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!f.name.trim() || f.sections.length === 0} onClick={() => onSave(f)}>Save Template</button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <div className="field span-all">
+          <label>Template name <span className="req">*</span></label>
+          <input className="input" value={f.name} onChange={(e) => set('name', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Type</label>
+          <select className="select" value={f.type} onChange={(e) => set('type', e.target.value)}>
+            {['Executive', 'Detailed', 'Compliance', 'Performance', 'Planning'].map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Accent colour</label>
+          <div className="flex" style={{ gap: 8 }}>
+            {['#8b53ac', '#036dc9', '#0f9d6e', '#d97706', '#ff3381', '#70428a'].map((c) => (
+              <span key={c} onClick={() => set('accent', c)} style={{ width: 26, height: 26, borderRadius: 8, background: c, cursor: 'pointer', outline: f.accent === c ? '2.5px solid var(--text)' : 'none', outlineOffset: 2 }} />
+            ))}
+          </div>
+        </div>
+        <div className="field span-all">
+          <label>Description</label>
+          <textarea className="textarea" value={f.description} onChange={(e) => set('description', e.target.value)} />
+        </div>
+        <div className="field span-all">
+          <label>Sections ({f.sections.length})</label>
+          <div className="flex-col" style={{ gap: 6 }}>
+            {f.sections.map((s, i) => (
+              <div key={i} className="flex-between" style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
+                <span className="small"><span className="muted">{i + 1}.</span> {s}</span>
+                <span className="flex" style={{ gap: 3 }}>
+                  <button className="btn-icon" style={{ width: 24, height: 24 }} title="Move up" onClick={() => move(i, -1)}>↑</button>
+                  <button className="btn-icon" style={{ width: 24, height: 24 }} title="Move down" onClick={() => move(i, 1)}>↓</button>
+                  <button className="btn-icon danger" style={{ width: 24, height: 24 }} title="Remove" onClick={() => set('sections', f.sections.filter((_, x) => x !== i))}>✕</button>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex mt-1" style={{ gap: 8 }}>
+            <input className="input" style={{ flex: 1 }} value={newSection} onChange={(e) => setNewSection(e.target.value)} placeholder="New section name…" />
+            <button className="btn btn-secondary" disabled={!newSection.trim()} onClick={() => { set('sections', [...f.sections, newSection.trim()]); setNewSection('') }}>+ Add</button>
+          </div>
+        </div>
+        <div className="field">
+          <label>Footer text</label>
+          <input className="input" value={f.footer} onChange={(e) => set('footer', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Options</label>
+          <div className="flex-col" style={{ gap: 6 }}>
+            <label className="checkbox-row"><input type="checkbox" checked={f.showCover} onChange={(e) => set('showCover', e.target.checked)} /> Include cover page</label>
+            <label className="checkbox-row"><input type="checkbox" checked={f.showTOC} onChange={(e) => set('showTOC', e.target.checked)} /> Include table of contents</label>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}

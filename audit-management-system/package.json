@@ -1,0 +1,20 @@
+{
+  "name": "audit-management-system",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Centralized web-based Audit Management System. Fully client-side: data is stored in the browser via IndexedDB + localStorage.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
