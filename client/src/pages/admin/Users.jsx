@@ -279,7 +279,7 @@ function UserModal({ user, data, onClose, onSave }) {
         </div>
         <div className="field">
           <label>{isNew ? 'Password' : 'New password (optional)'}</label>
-          <input className="input" type="text" value={f.password} onChange={(e) => set('password', e.target.value)} placeholder={isNew ? `default: ${config.defaultPassword}` : 'leave blank to keep current'} />
+          <input className="input" type="text" value={f.password} onChange={(e) => set('password', e.target.value)} placeholder={isNew ? 'leave blank to use the standard initial password' : 'leave blank to keep current'} />
         </div>
       </div>
     </Modal>

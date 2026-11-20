@@ -5,7 +5,7 @@ Run `npm install && npm run dev`, open the app, and follow this script. Every st
 ---
 
 ## 0. Setup (before the audience arrives)
-- Open http://localhost:5173 (or `npm run preview` after a build).
+- Open http://localhost:5193 (or `npm run preview` after a build).
 - You land on the login page. Leave it there — the six demo accounts are visible, which is your first talking point: **six roles, one platform, role-based access**.
 
 ## 1. Sign in — Audit Director (1 min)

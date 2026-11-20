@@ -5,10 +5,10 @@ import { useData } from '../../context/DataContext'
 import { Badge, DataTable, PageHead, Tabs, StatCard, Empty, Modal, KV, Avatar } from '../../components/ui'
 import { fmtDate, fmtDateTime, fmtRelative, groupBy } from '../../lib/utils'
 import { ROLES } from '../../lib/permissions'
+import { exportCSV } from '../../lib/exporters'
 
 const QUICK_FILTERS = [
   { key: 'all', label: 'All Activity' },
-  { key: 'logins', label: 'Logins & Sessions' },
   { key: 'audits', label: 'Audits' },
   { key: 'findings', label: 'Findings & Compliance' },
   { key: 'documents', label: 'Documents' },
@@ -122,6 +122,10 @@ export default function ActivityLog() {
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
         </select>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => exportCSV('activity-trail', activityRows.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', location: a.location, ip: a.ip || '' })))}
+        >⇩ Export View</button>
       </div>
 
       {tab === 'all' && (

@@ -4,7 +4,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useData } from '../context/DataContext'
 import { PageHead, Tabs, Avatar, AvatarStack, Empty, Modal, UserPicker, Badge } from '../components/ui'
-import { navigate } from '../lib/router'
 import { fmtRelative, fmtDateTime, uid, groupBy } from '../lib/utils'
 import { ROLES } from '../lib/permissions'
 
@@ -166,11 +165,12 @@ export default function Messages() {
                   {active.subject ? ` · ${active.subject}` : ''}
                 </div>
               </div>
-              {active.otherUsers.map((u) => (
-                <button key={u.id} className="user-chip" style={{ padding: '2px 6px 2px 2px' }} title={`Open ${u.name}'s activity`} onClick={() => navigate('/activity')}>
+              {active.otherUsers.slice(0, 5).map((u) => (
+                <span key={u.id} className="flex" style={{ gap: 4 }} title={`${u.name} — ${u.designation || roleOf(u.id)}`}>
                   <Avatar name={u.name} color={u.avatarColor} sm />
-                </button>
+                </span>
               ))}
+              {active.otherUsers.length > 5 && <span className="muted tiny" style={{ alignSelf: 'center' }}>+{active.otherUsers.length - 5}</span>}
             </div>
             <div className="chat-body scroll-y">
               {active.msgs.map((m) => {

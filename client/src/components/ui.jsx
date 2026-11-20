@@ -529,26 +529,35 @@ export function UserPicker({ open, onClose, users, onDone, multi = true, title =
 }
 
 // ==========================================================================
-// FilePreview - preview a stored file (pdf / image / text / html-doc / csv)
+// FilePreview - preview a stored file (pdf / image / text / word / csv)
 // ==========================================================================
 export function FilePreviewModal({ open, onClose, fileId, name }) {
   const [url, setUrl] = useState(null)
   const [blob, setBlob] = useState(null)
+  const [csv, setCsv] = useState(null)
+  const [wordHtml, setWordHtml] = useState(null)
   const kind = fileKind(name)
 
   useEffect(() => {
     let objectUrl = null
     let cancelled = false
     if (open && fileId) {
-      idb.get('files', fileId).then((f) => {
+      idb.get('files', fileId).then(async (f) => {
         if (cancelled) return
         if (f && f.blob) {
           setBlob(f.blob)
+          // Word exports here are HTML documents with a Word mime type - read
+          // the text and render it as HTML so browsers show it inline.
+          if (f.blob.type.includes('word')) {
+            try { setWordHtml(await f.blob.text()) } catch (e) { setWordHtml(null) }
+          } else if (f.blob.type.includes('csv') || (kind === 'excel')) {
+            try { setCsv(parseCsv(await f.blob.text())) } catch (e) { setCsv(null) }
+          }
           objectUrl = URL.createObjectURL(f.blob)
           setUrl(objectUrl)
-        } else { setUrl(null); setBlob(null) }
+        } else { setUrl(null); setBlob(null); setWordHtml(null); setCsv(null) }
       })
-    } else { setUrl(null); setBlob(null) }
+    } else { setUrl(null); setBlob(null); setWordHtml(null); setCsv(null) }
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [open, fileId])
 
@@ -562,8 +571,8 @@ export function FilePreviewModal({ open, onClose, fileId, name }) {
     document.body.removeChild(a)
   }
 
-  const canIframe = blob && (blob.type.includes('pdf') || blob.type.includes('html') || blob.type.includes('word'))
-  const isText = blob && (blob.type.startsWith('text/') || blob.type.includes('csv') || blob.type.includes('json'))
+  const canIframe = blob && (blob.type.includes('pdf') || blob.type.includes('html'))
+  const isText = blob && (blob.type.startsWith('text/') || blob.type.includes('json'))
 
   return (
     <Modal
@@ -578,13 +587,58 @@ export function FilePreviewModal({ open, onClose, fileId, name }) {
       {!url && <Empty icon="📄" title="Preview unavailable" sub="The file could not be loaded from storage." />}
       {url && kind === 'image' && <div className="preview-frame"><img src={url} alt={name} /></div>}
       {url && canIframe && <div className="preview-frame"><iframe src={url} title={name} /></div>}
-      {url && !canIframe && isText && <TextPreview url={url} />}
-      {url && !canIframe && !isText && kind !== 'image' && (
+      {url && wordHtml && !canIframe && <div className="preview-frame"><iframe title={name} srcDoc={wordHtml} /></div>}
+      {url && csv && csv.rows.length > 0 && <CsvTable csv={csv} />}
+      {url && !canIframe && !wordHtml && !csv && isText && <TextPreview url={url} />}
+      {url && !canIframe && !wordHtml && !csv && !isText && kind !== 'image' && (
         <Empty icon="📦" title="Preview not available for this format" sub="Download the file to open it in the native application.">
           <button className="btn btn-primary btn-sm" onClick={download}>⇩ Download file</button>
         </Empty>
       )}
     </Modal>
+  )
+}
+
+// minimal CSV parser (handles quoted cells)
+function parseCsv(text) {
+  const rows = []
+  let row = []
+  let cell = ''
+  let inQ = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQ) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++ }
+      else if (c === '"') inQ = false
+      else cell += c
+    } else if (c === '"') inQ = true
+    else if (c === ',') { row.push(cell); cell = '' }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      row.push(cell); cell = ''
+      rows.push(row); row = []
+    } else cell += c
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row) }
+  return { rows: rows.filter((r) => r.some((x) => x !== '')) }
+}
+
+function CsvTable({ csv }) {
+  const [head, ...body] = csv.rows
+  return (
+    <div className="preview-frame" style={{ background: 'var(--surface)' }}>
+      <div className="table-scroll" style={{ maxHeight: 420, overflowY: 'auto' }}>
+        <table className="table" style={{ fontSize: 11.5 }}>
+          <thead><tr>{head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
+          <tbody>
+            {body.slice(0, 100).map((r, i) => (
+              <tr key={i}>{head.map((_, j) => <td key={j}>{r[j] ?? ''}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {body.length > 100 && <div className="muted tiny" style={{ padding: '6px 12px' }}>Showing first 100 of {body.length} rows — download for the full file.</div>}
+    </div>
   )
 }
 

@@ -16,7 +16,7 @@ npm install
 
 # 2. start the dev server
 npm run dev
-# → open http://localhost:5173
+# → open http://localhost:5193
 
 # production build (optional)
 npm run build

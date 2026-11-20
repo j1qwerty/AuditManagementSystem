@@ -52,7 +52,8 @@ const FLOWS = [
     steps: [
       'On the sign-in page, use the quick access cards to sign in as Rajesh Kumar Singh (Chief Audit Officer) — or use the Office SSO button.',
       'Note the dashboard: KPI cards for active audits, open findings, overdue compliance, compliance rate and flagged payments — each clickable.',
-      'Click the "Open Findings" KPI card — it opens the findings registry filtered. Use the ← back button or sidebar to return.'
+      'Click the "Open Findings" KPI card — it opens the findings registry filtered. Use the ← back button or sidebar to return.',
+      'Hover any chart segment to see details; click it to jump to the relevant page with filters applied. Try the notifications bell — entries are colour-coded and deep-link to their page.'
     ]
   },
   {
@@ -72,7 +73,7 @@ const FLOWS = [
       'In the Checklist tab, click "Apply Template" and append the standard financial checklist — 11 items appear.',
       'Add a custom item using "+ Add Item" (e.g. a department-specific verification), then set a few items to Completed using the status dropdown.',
       'Switch to the Evidence tab and upload a file with a detailed description — it is stored with the uploader, time and description.',
-      'Click Preview on any evidence item to view it inline; hover the Overview tab to see progress update automatically from the checklist.'
+      'Click Preview on any evidence item to view it inline; open the Overview tab to see progress update automatically from the checklist and the full action history.'
     ]
   },
   {
@@ -83,6 +84,15 @@ const FLOWS = [
       'Sign in as Sunita Devi (Department Coordinator), open Findings Registry, view the finding and use "Submit Department Response".',
       'Back as the Senior Audit Officer, mark the finding Under Review. Note the remarks captured on every transition.',
       'In the audit\'s Observations tab (or Compliance Tracking), raise an observation linked to the finding with the rule violated and a due date.'
+    ]
+  },
+  {
+    title: 'Department coordinator workflow',
+    steps: [
+      'Sign in as Sunita Devi (Department Coordinator) — the dashboard shows your department\'s findings awaiting response and its audits.',
+      'Open Findings Registry — filter by department if needed, open a finding and read the full description and history.',
+      'Submit the department response with action taken details.',
+      'Open Compliance Tracking — the coordinator view shows the department\'s observations. Use the view (👁) icon to see the full follow-up history before responding.'
     ]
   },
   {
@@ -118,7 +128,8 @@ const FLOWS = [
     steps: [
       'Open Analytics & Risk → Flagged Payments tab.',
       'Open a flagged transaction with the view icon — the modal explains exactly which rules fired (duplicate payment, round figure, split purchase, weekend transfer, vendor concentration).',
-      'Click "Confirm Anomaly" or "False Positive" with remarks — the decision is recorded and visible in the review history.'
+      'Click "Confirm Anomaly" or "False Positive" with remarks — the decision is recorded and visible in the review history.',
+      'Switch to the Trends and Risk Matrix tabs to show projections and the impact × likelihood heatmap.'
     ]
   },
   {
@@ -126,7 +137,8 @@ const FLOWS = [
     steps: [
       'As Chief Audit Officer, open Teams. Create a team, pick a lead, add members via the people picker (search + role filters), and save.',
       'Deactivate an old team with the pause icon — inactive teams cannot be assigned.',
-      'Open Departments. Add a department, edit its head and budget, deactivate one, then click into a department profile and use the back button to return.'
+      'Open Departments. Add a department, edit its head and budget, deactivate one, then click into a department profile and use the back button to return.',
+      'Inside a department profile, show the audit history, units, coordinators and compliance posture cards.'
     ]
   },
   {
@@ -146,6 +158,14 @@ const FLOWS = [
       'Share a document with specific people — they receive a notification.',
       'Open Messages: the tabs separate direct and group conversations; groups show stacked avatars and participant names.',
       'Start a new group message using the people picker with role and department filters, and send a reply — recipients see it instantly (try a second browser tab).'
+    ]
+  },
+  {
+    title: 'Team discussion inside an audit',
+    steps: [
+      'As a member of an audit team (e.g. Priya Yadav), open any active audit and switch to the Discussion tab.',
+      'Post a message to the team — the chat shows sender names and roles, with your own messages aligned right.',
+      'Point out that every checklist update, evidence upload, finding and review action also lands in the Overview action history — nothing in the app is untracked.'
     ]
   }
 ]

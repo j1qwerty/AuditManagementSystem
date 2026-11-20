@@ -7,7 +7,7 @@ import { useData } from '../context/DataContext'
 import { navigate } from '../lib/router'
 import {
   Badge, DataTable, PageHead, Progress, TypeBadge, SeverityBadge, Modal, ConfirmDialog,
-  Empty, KV, Tabs, Avatar, FilePreviewModal, InfoTip, EscalationBadge, SectionTitle
+  Empty, KV, Tabs, Avatar, FilePreviewModal, InfoTip, EscalationBadge, SectionTitle, UserPicker
 } from '../components/ui'
 import { fmtDate, fmtDateTime, fmtRelative, fmtBytes, fmtINR, daysFromNow, uid, fileKind } from '../lib/utils'
 import { suggestedProgress } from '../lib/ai'
@@ -97,7 +97,7 @@ export default function AuditDetail({ id }) {
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
-      {tab === 'overview' && <Overview audit={audit} progress={progress} dept={dept} data={data} onGoto={setTab} />}
+      {tab === 'overview' && <Overview audit={audit} progress={progress} dept={dept} data={data} onGoto={setTab} canManage={can('audit.edit')} mutate={mutate} toast={toast} currentUser={currentUser} />}
       {tab === 'checklist' && (
         <ChecklistTab
           audit={audit} canEdit={can('audit.execute')} data={data} mutate={mutate} toast={toast}
@@ -153,7 +153,36 @@ export default function AuditDetail({ id }) {
 /* ======================================================================== */
 /* Overview                                                                  */
 /* ======================================================================== */
-function Overview({ audit, progress, dept, data, onGoto }) {
+function Overview({ audit, progress, dept, data, onGoto, canManage, mutate, toast, currentUser }) {
+  const [teamEdit, setTeamEdit] = useState(false)
+  const [teamForm, setTeamForm] = useState(null)
+  const [showTeamPicker, setShowTeamPicker] = useState(false)
+
+  const openTeamEdit = () => {
+    setTeamForm({
+      leadAuditorId: audit.leadAuditorId || '',
+      teamIds: audit.team.map((t) => t.userId)
+    })
+    setTeamEdit(true)
+  }
+
+  const saveTeam = async () => {
+    const lead = data.users.find((u) => u.id === teamForm.leadAuditorId)
+    const team = teamForm.teamIds.map((tid, i) => {
+      const u = data.users.find((x) => x.id === tid)
+      return { userId: tid, name: u ? u.name : tid, role: i === 0 ? 'Co-lead' : 'Auditor' }
+    })
+    const leadChanged = teamForm.leadAuditorId !== (audit.leadAuditorId || '')
+    await mutate(
+      { leadAuditorId: teamForm.leadAuditorId || null, leadAuditorName: lead ? lead.name : null, team },
+      `Team updated — lead: ${lead ? lead.name : 'unassigned'}, ${team.length} members`,
+      'Assigned team'
+    )
+    setTeamEdit(false)
+    toast('Team updated')
+    void leadChanged
+  }
+
   const openFindings = data.findings.filter((f) => f.auditId === audit.id && !['Resolved', 'Closed'].includes(f.status))
   const openObs = data.observations.filter((o) => o.auditId === audit.id && o.status !== 'Resolved')
   const doneChecklist = (audit.checklist || []).filter((c) => ['Completed', 'N/A'].includes(c.status)).length
@@ -233,7 +262,13 @@ function Overview({ audit, progress, dept, data, onGoto }) {
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3>Team</h3><span className="hint">{audit.team.length + (audit.leadAuditorId ? 1 : 0)} members</span></div>
+          <div className="card-head">
+            <h3>Team</h3>
+            <div className="flex" style={{ gap: 8 }}>
+              <span className="hint">{audit.team.length + (audit.leadAuditorId ? 1 : 0)} members</span>
+              {canManage && <button className="btn btn-secondary btn-sm" onClick={openTeamEdit}>✎ Edit Team</button>}
+            </div>
+          </div>
           <div className="card-pad flex-col" style={{ gap: 10 }}>
             {audit.leadAuditorId && (
               <div className="flex" style={{ gap: 10 }}>
@@ -253,10 +288,64 @@ function Overview({ audit, progress, dept, data, onGoto }) {
                 </div>
               </div>
             ))}
-            {!audit.leadAuditorId && !audit.team.length && <Empty icon="👥" title="No team assigned" sub="Assign a team from Audit Planning." />}
+            {!audit.leadAuditorId && !audit.team.length && <Empty icon="👥" title="No team assigned" sub={canManage ? 'Use Edit Team to assign a lead and members.' : 'A team will be assigned by the planning team.'} />}
           </div>
         </div>
       </div>
+
+      {/* team edit modal */}
+      <Modal
+        open={teamEdit} onClose={() => setTeamEdit(false)}
+        title="Edit Audit Team" sub={`${audit.code} — changes are tracked and the team is notified`}
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setTeamEdit(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={saveTeam}>Save Team</button>
+          </>
+        }
+      >
+        {teamForm && (
+          <div className="flex-col" style={{ gap: 12 }}>
+            <div className="field">
+              <label>Lead auditor</label>
+              <select className="select" value={teamForm.leadAuditorId} onChange={(e) => setTeamForm((f) => ({ ...f, leadAuditorId: e.target.value }))}>
+                <option value="">Not assigned</option>
+                {data.users.filter((u) => ['senior', 'cao'].includes(u.role) && u.status === 'Active').map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} — {u.designation}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Load from saved team</label>
+              <select className="select" value="" onChange={(e) => {
+                const t = data.teams.find((x) => x.id === e.target.value)
+                if (t) setTeamForm((f) => ({ ...f, leadAuditorId: t.leadId, teamIds: t.memberIds }))
+              }}>
+                <option value="">Choose a saved team…</option>
+                {data.teams.filter((t) => t.status === 'Active').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <span className="help">Fills the lead and members from a reusable team.</span>
+            </div>
+            <div className="field">
+              <label>Team members ({teamForm.teamIds.length} selected)</label>
+              <div className="flex wrap mb-2" style={{ gap: 6 }}>
+                {teamForm.teamIds.map((id) => {
+                  const u = data.users.find((x) => x.id === id)
+                  return <span key={id} className="chip active" onClick={() => setTeamForm((f) => ({ ...f, teamIds: f.teamIds.filter((x) => x !== id) }))}>{u ? u.name : id} ✕</span>
+                })}
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowTeamPicker(true)}>+ Choose members</button>
+            </div>
+          </div>
+        )}
+        <UserPicker
+          open={showTeamPicker} onClose={() => setShowTeamPicker(false)}
+          users={data.users.filter((u) => ['senior', 'junior', 'coordinator'].includes(u.role))}
+          multi initialSelected={teamForm ? teamForm.teamIds : []}
+          title="Add team members"
+          onDone={(ids) => setTeamForm((f) => ({ ...f, teamIds: ids }))}
+        />
+      </Modal>
     </div>
   )
 }
