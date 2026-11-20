@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Execution</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Audit Execution – AUD-2026-014 (PWD Financial) <span class="fr">FR-030–038</span></h2><p class="sub">Checklists, evidence, findings, review workflow and collaboration.</p>
+<div class="card"><div class="steps"><div class="done">Planned</div><div class="done">Fieldwork</div><div class="cur">Review</div><div>Draft report</div><div>Final approval</div><div>Follow-up</div></div>
+<p>Progress <b>68%</b></p><div class="bar"><i style="width:68%"></i></div></div>
+<div class="tabs"><button class="on" onclick="tab(this,'a')">Checklist</button><button onclick="tab(this,'b')">Evidence</button><button onclick="tab(this,'c')">Findings</button><button onclick="tab(this,'d')">Work papers &amp; review</button><button onclick="tab(this,'e')">Collaboration</button></div>
+<div id="a" class="tab on card"><h3>Digital checklist <span class="fr">FR-030</span></h3>
+<table><tr><th>✔</th><th>Procedure</th><th>Status</th></tr>
+<tr><td><input type="checkbox" checked style="width:auto"></td><td>Verify budget vs. expenditure</td><td><span class="b ok">Done</span></td></tr>
+<tr><td><input type="checkbox" checked style="width:auto"></td><td>Sample 60 vouchers</td><td><span class="b ok">Done</span></td></tr>
+<tr><td><input type="checkbox" style="width:auto"></td><td>Tender process verification</td><td><span class="b warn">In progress</span></td></tr></table></div>
+<div id="b" class="tab card"><h3>Evidence <span class="fr">FR-031</span></h3>
+<table><tr><th>File</th><th>Uploaded by</th><th>GPS</th><th>Ver.</th></tr>
+<tr><td>voucher_batch1.pdf</td><td>A. Singh</td><td>26.84N 80.94E</td><td>v2</td></tr>
+<tr><td>site_photo_bridge.jpg</td><td>A. Singh</td><td>26.85N 80.91E</td><td>v1</td></tr></table>
+<p><input type="file"> <button onclick="toast('Evidence uploaded & logged in audit trail')">Upload</button></p></div>
+<div id="c" class="tab card"><h3>Findings <span class="fr">FR-032</span><span class="fr">FR-037</span></h3>
+<table><tr><th>ID</th><th>Finding</th><th>Severity</th><th>Status</th></tr>
+<tr><td>F-01</td><td>Payment exceeded sanctioned amount by ₹4.2L</td><td><span class="b bad">High</span></td><td>Awaiting dept. response</td></tr>
+<tr><td>F-02</td><td>Missing tender documents (3 cases)</td><td><span class="b warn">Medium</span></td><td>Draft</td></tr></table>
+<label>New finding</label><textarea rows="2" placeholder="Describe observation, criteria, cause, effect"></textarea>
+<p><button data-need="finding" onclick="toast('Finding saved')">Add finding</button></p></div>
+<div id="d" class="tab card"><h3>Review workflow <span class="fr">FR-033</span><span class="fr">FR-038</span></h3>
+<p>Work paper WP-07 : <span class="b info">Submitted by Senior</span></p>
+<p><button data-need="review-submit" onclick="toast('Submitted to Chief Officer')">Submit for review</button> <button class="acc" data-need="approve-review" onclick="toast('Approved')">Approve</button> <button class="red" data-need="approve-review" onclick="toast('Returned with comments')">Return</button></p>
+<div class="note">Approval stages for observations, findings and reports are TBC (SRS Q5). The flow shown is illustrative.</div></div>
+<div id="e" class="tab card"><h3>Team collaboration <span class="fr">FR-034</span><span class="fr">FR-050</span></h3>
+<p><b>S. Khan:</b> Please re-verify voucher 118.<br><b>A. Singh:</b> Done, uploaded v2.</p><input placeholder="Type a message…"><p><button onclick="toast('Message sent')">Send</button></p></div>
+</div></body></html>

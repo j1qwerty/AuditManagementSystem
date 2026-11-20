@@ -1,0 +1,13 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Compliance</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Compliance Tracking <span class="fr">FR-060–066</span></h2><p class="sub">Observation follow-up, time-bound tracking, reminders and escalation.</p>
+<div class="grid g4"><div class="card kpi"><b>412</b><span>Open</span></div><div class="card kpi"><b style="color:#d9a300">96</b><span>Due in 7 days</span></div><div class="card kpi"><b style="color:#c0392b">38</b><span>Overdue</span></div><div class="card kpi"><b style="color:#2e8b57">1,204</b><span>Resolved</span></div></div>
+<div class="card"><h3>Observation register</h3>
+<table id="t"><tr><th>ID</th><th>Department</th><th>Observation</th><th>Due</th><th>Status</th><th>Action</th></tr>
+<tr><td>OBS-221</td><td>Rural Dev.</td><td>Duplicate payments</td><td>20-Nov</td><td><span class="b bad">Overdue (L1)</span></td><td><button class="red" data-need="assign" onclick="toast('Escalated to Director (L2)')">Escalate</button> <button class="sec" onclick="toast('Reminder emailed')">Remind</button></td></tr>
+<tr><td>OBS-198</td><td>Education</td><td>Unspent grant</td><td>28-Nov</td><td><span class="b warn">Due soon</span></td><td><button class="sec" onclick="toast('Reminder emailed')">Remind</button></td></tr>
+<tr><td>OBS-176</td><td>PWD</td><td>Missing tender docs</td><td>05-Dec</td><td><span class="b info">Response submitted</span></td><td><button data-need="approve-review" onclick="toast('Marked resolved')">Verify &amp; resolve</button></td></tr></table></div>
+<div class="grid g2">
+<div class="card"><h3>Escalation matrix (illustrative)</h3><div class="steps"><div class="done">Day 0 Reminder</div><div class="done">Day 7 Reminder</div><div class="cur">Day 15 Chief</div><div>Day 30 Director</div></div><p class="note">Time limits and escalation rules are TBC.</p></div>
+<div class="card"><h3>Department response <span class="b info">Coordinator</span></h3><label>Response to OBS-221</label><textarea rows="3"></textarea><input type="file"><p><button data-need="respond" onclick="toast('Response submitted')">Submit response</button></p></div></div>
+</div></body></html>

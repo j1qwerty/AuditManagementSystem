@@ -1,0 +1,24 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Mobile</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Mobile Field Audit App <span class="fr">FR-090–095</span></h2><p class="sub">Offline-first collection, GPS tagging, digital signature and sync.</p>
+<div class="grid g2">
+<div class="phone"><b>Field audit – Site 7</b> <span id="net" class="b ok">Online</span>
+<p>Checklist: Bridge inspection</p>
+<label style="color:#000"><input type="checkbox" style="width:auto"> Pillar condition verified</label>
+<label style="color:#000"><input type="checkbox" style="width:auto"> Measurements match BoQ</label>
+<label>Remarks</label><textarea rows="2"></textarea>
+<p><button class="sec" onclick="add('Photo captured @ 26.8467N, 80.9462E')">📷 Capture + GPS</button></p>
+<canvas id="sg" width="250" height="70" style="border:1px solid #ccc;touch-action:none"></canvas><br><small>Digital signature (FR-094)</small>
+<p><button onclick="add('Record saved')">Save</button> <button class="sec" onclick="sync()">Sync now</button></p>
+<small>Pending sync: <b id="q">0</b></small></div>
+<div><div class="card"><h3>Simulate connectivity</h3><button onclick="tog()" class="acc">Toggle online / offline</button><p class="note">Offline: records queue locally. Online: they sync automatically (FR-095). Conflict handling and sync limits are TBC.</p></div>
+<div class="card"><h3>Sync log</h3><div id="log"><small>No activity</small></div></div>
+<div class="card"><h3>Open items</h3><span class="b tbc">Supported devices / OS</span> <span class="b tbc">Offline storage encryption</span> <span class="b tbc">Languages</span></div></div></div>
+</div>
+<script>
+let on=true,n=0;const L=m=>{log.innerHTML=`<div>${new Date().toLocaleTimeString()} – ${m}</div>`+(log.innerText.startsWith("No")?"":log.innerHTML)};
+function tog(){on=!on;net.textContent=on?"Online":"Offline";net.className="b "+(on?"ok":"bad");L(on?"Back online":"Went offline");if(on)sync()}
+function add(m){if(on)L(m+" → synced");else{n++;q.textContent=n;L(m+" → queued offline")}}
+function sync(){if(!on)return toast("Offline – cannot sync");if(n){L(n+" records synced");n=0;q.textContent=0}}
+const c=sg.getContext("2d");let d=0;sg.onpointerdown=e=>{d=1;c.beginPath();c.moveTo(e.offsetX,e.offsetY)};sg.onpointermove=e=>{if(d){c.lineTo(e.offsetX,e.offsetY);c.stroke()}};onpointerup=()=>d=0;
+</script></body></html>

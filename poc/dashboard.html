@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Executive Dashboard <span class="fr">FR-041</span><span class="fr">FR-070–075</span></h2><p class="sub">State-wide view of audit performance, compliance and risk.</p>
+<div class="grid g4">
+<div class="card kpi"><b>128</b><span>Audits in annual plan</span></div>
+<div class="card kpi"><b>74</b><span>In progress</span></div>
+<div class="card kpi"><b>412</b><span>Open observations</span></div>
+<div class="card kpi"><b>81%</b><span>Compliance rate (avg.)</span></div></div>
+<div class="grid g2">
+<div class="card"><h3>Audits by type <span class="fr">SRS 2.3</span></h3>
+<script>[["Financial",48,"#12355b"],["Performance",22,"#2f80c0"],["Compliance",34,"#2e8b57"],["IT",14,"#7b4fc9"],["Forensic",10,"#c0392b"]].forEach(a=>document.write(`<div>${a[0]} (${a[1]})<div class="bar"><i style="width:${a[1]*2}%;background:${a[2]}"></i></div></div><br>`))</script></div>
+<div class="card"><h3>Compliance trend (6 months) <span class="fr">FR-072</span></h3>
+<svg viewBox="0 0 300 120" width="100%"><polyline fill="none" stroke="#12355b" stroke-width="3" points="10,90 60,80 110,70 160,60 210,50 260,35"/><polyline fill="none" stroke="#c0392b" stroke-width="3" stroke-dasharray="4" points="10,30 60,35 110,45 160,50 210,60 260,70"/><text x="10" y="115" font-size="9">Jun … Nov</text><text x="200" y="20" font-size="9" fill="#12355b">— Compliance %</text><text x="200" y="32" font-size="9" fill="#c0392b">-- Open obs.</text></svg></div></div>
+<div class="grid g2">
+<div class="card"><h3>Department benchmarking <span class="fr">FR-028</span></h3>
+<table><tr><th>Department</th><th>Score</th><th>Trend</th></tr>
+<tr><td>Public Works</td><td>88</td><td>▲</td></tr><tr><td>Health</td><td>79</td><td>▲</td></tr><tr><td>Education</td><td>72</td><td>▼</td></tr><tr><td>Rural Development</td><td>64</td><td>▼</td></tr></table></div>
+<div class="card"><h3>AI-assisted risk alerts <span class="fr">FR-025/027/075</span></h3>
+<div class="ai"><b>Anomaly:</b> 14 duplicate payments, Rural Dev. (PFMS) – risk 87. <br><button class="sec" onclick="toast('Flag accepted – assigned to Forensic team')">Accept</button> <button class="sec" onclick="toast('Marked false positive – feedback logged')">False positive</button></div>
+<div class="ai"><b>Pattern:</b> Year-end spend spike, Education – risk 71. <br><button class="sec" onclick="toast('Flag accepted')">Accept</button> <button class="sec" onclick="toast('Marked false positive')">False positive</button></div>
+<small class="b tbc">AI governance: explainability, human approval, false-positive handling – to be specified</small></div></div>
+</div></body></html>

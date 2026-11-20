@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Planning</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Audit Planning <span class="fr">FR-020–028</span></h2><p class="sub">Annual calendar, team allocation, risk-based selection. Also covers department profiles (FR-010–013).</p>
+<div class="tabs"><button class="on" onclick="tab(this,'t1')">Annual calendar</button><button onclick="tab(this,'t2')">Create audit</button><button onclick="tab(this,'t3')">Risk assessment</button><button onclick="tab(this,'t4')">Departments</button></div>
+<div id="t1" class="tab on card"><h3>2026–27 Calendar (Gantt)</h3>
+<div class="cal"><script>"Apr May Jun Jul Aug Sep Oct Nov Dec Jan Feb Mar".split(" ").forEach(m=>document.write(`<div>${m}</div>`))</script></div>
+<script>[["PWD Financial",0,33,"#12355b"],["Health Performance",17,42,"#2f80c0"],["Education Compliance",33,50,"#2e8b57"],["Rural Dev. Forensic",42,67,"#c0392b"],["State IT Systems",58,83,"#7b4fc9"]].forEach(a=>document.write(`<div>${a[0]}<div class="gantt"><i style="left:${a[1]}%;width:${a[2]-a[1]}%;background:${a[3]}">${a[0]}</i></div></div>`))</script>
+<p><button data-need="plan" onclick="toast('Automated notifications sent to teams (FR-024)')">Publish calendar &amp; notify</button></p></div>
+<div id="t2" class="tab card"><h3>Schedule new audit</h3><div class="grid g2"><div>
+<label>Department</label><select><option>Public Works</option><option>Health</option></select>
+<label>Audit type</label><select><option>Financial</option><option>Performance</option><option>Compliance</option><option>IT</option><option>Forensic</option></select>
+<label>Audit period</label><input value="01-Apr-2025 to 31-Mar-2026"></div><div>
+<label>Team lead</label><select><option>S. Khan (Senior)</option></select>
+<label>Team members</label><select multiple><option selected>A. Singh (Junior)</option><option>P. Mishra (Junior)</option><option>N. Gupta (Junior)</option></select>
+<label>Workload</label><div class="bar"><i style="width:65%"></i></div><small>Resource optimisation suggests: add 1 junior (FR-023)</small></div></div>
+<p><button data-need="assign" onclick="toast('Audit AUD-2026-031 created')">Create &amp; assign</button></p></div>
+<div id="t3" class="tab card"><h3>Risk-based prioritisation <span class="b info">AI-assisted</span></h3>
+<table><tr><th>Department</th><th>Risk score</th><th>Key factors</th><th>Suggested audit</th><th></th></tr>
+<tr><td>Rural Development</td><td><span class="b bad">87</span></td><td>Duplicate payments, delayed responses</td><td>Forensic</td><td><button class="sec" data-need="plan" onclick="toast('Added to calendar')">Add</button></td></tr>
+<tr><td>Education</td><td><span class="b warn">71</span></td><td>Year-end spend spike</td><td>Compliance</td><td><button class="sec" data-need="plan" onclick="toast('Added')">Add</button></td></tr>
+<tr><td>Public Works</td><td><span class="b ok">34</span></td><td>Stable history</td><td>Routine financial</td><td><button class="sec" data-need="plan" onclick="toast('Added')">Add</button></td></tr></table>
+<p class="note">Scores are explainable by factor and need human approval before use. Scoring model and data sources are TBC.</p></div>
+<div id="t4" class="tab card"><h3>Department profile &amp; org structure</h3><div class="grid g2">
+<div><label>Department</label><input value="Public Works Department"><label>Nodal contact</label><input value="Er. A. Sharma, +91-522-XXXXXXX"><label>Email</label><input value="coord.pwd@up.gov.in"><p><button data-need="config" onclick="toast('Saved')">Save</button></p></div>
+<div><b>Org tree</b><ul><li>Principal Secretary<ul><li>Chief Engineer – Roads<ul><li>Division 1</li><li>Division 2</li></ul></li><li>Chief Engineer – Bridges</li></ul></li></ul></div></div></div>
+</div></body></html>

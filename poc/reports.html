@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Reports</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Reports &amp; Documents <span class="fr">FR-040–044</span><span class="fr">FR-080–084</span></h2><p class="sub">Report generation with templates, export, and a versioned repository.</p>
+<div class="tabs"><button class="on" onclick="tab(this,'r')">Report builder</button><button onclick="tab(this,'d')">Document repository</button></div>
+<div id="r" class="tab on card"><div class="grid g2"><div>
+<label>Template</label><select><option>Financial audit report</option><option>Compliance summary</option><option>Custom…</option></select>
+<label>Audit</label><select><option>AUD-2026-014 PWD</option></select>
+<label>Sections</label><label style="color:#000"><input type="checkbox" checked style="width:auto"> Executive summary</label><label style="color:#000"><input type="checkbox" checked style="width:auto"> Findings</label><label style="color:#000"><input type="checkbox" checked style="width:auto"> Dept. responses</label><label style="color:#000"><input type="checkbox" style="width:auto"> Charts</label>
+<p><button onclick="toast('Draft v1 generated')">Generate draft</button> <button class="acc" data-need="approve-report" onclick="toast('Report finalised')">Approve final</button></p>
+<p>Export: <button class="sec" onclick="toast('PDF exported')">PDF</button> <button class="sec" onclick="toast('Excel exported')">Excel</button> <button class="sec" onclick="toast('Word exported')">Word</button></p></div>
+<div style="border:1px solid var(--bd);padding:14px;background:#fafafa"><b>DRAFT – Financial Audit Report</b><br><small>PWD, FY 2025–26</small><hr>1. Executive summary<br>2. Scope &amp; methodology<br>3. Findings (F-01, F-02)<br>4. Recommendations<br><small>Languages (English/Hindi) – TBC</small></div></div></div>
+<div id="d" class="tab card"><input placeholder="Search documents, tags, audit IDs… (FR-084)"><br><br>
+<table><tr><th>Document</th><th>Version</th><th>Owner</th><th>Shared with</th><th></th></tr>
+<tr><td>voucher_batch1.pdf</td><td>v2 <small>(v1 archived)</small></td><td>A. Singh</td><td>Audit team</td><td><button class="sec" onclick="toast('Secure link created, expires in 48h')">Share</button></td></tr>
+<tr><td>Dept_budget_2025.xlsx</td><td>v1</td><td>PWD Coord.</td><td>Audit team</td><td><button class="sec" onclick="toast('Secure link created')">Share</button></td></tr></table>
+<p class="note">Retention, archival and legal hold rules to be confirmed.</p></div>
+</div></body></html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Login – AMS</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>Sign in <span class="fr">FR-005</span><span class="fr">FR-102</span><span class="fr">FR-001</span></h2>
+<p class="sub">Single sign-on with government identity, then role-based access.</p>
+<div class="grid g2">
+<div class="card"><h3>Government SSO</h3>
+<div class="note">To confirm: identity provider, MFA, password policy, account lifecycle (SRS 3.1).</div>
+<label>Official ID / Email</label><input value="officer@up.gov.in">
+<label>Password</label><input type="password" value="••••••••">
+<label>Sign in as role (demo)</label><select onchange="localStorage.setItem('role',this.value)" id="r"></select>
+<p><button onclick="location='dashboard.html'" class="acc">Sign in with SSO</button> <button class="sec" onclick="toast('OTP sent (mock – MFA is TBC)')">Verify OTP</button></p></div>
+<div class="card"><h3>Role overview <span class="fr">SRS 1.3</span></h3>
+<table><tr><th>Role</th><th>Primary responsibility</th></tr>
+<tr><td>System Administrator</td><td>Configuration, users, monitoring, integrations, security</td></tr>
+<tr><td>Audit Director</td><td>Strategy, high-level reporting, budget/resource audits, policy</td></tr>
+<tr><td>Chief Audit Officer</td><td>Planning, scheduling, team mgmt, quality review &amp; approval</td></tr>
+<tr><td>Senior Audit Officer</td><td>Execution, findings analysis, coordination, stakeholder comms</td></tr>
+<tr><td>Junior Audit Officer</td><td>Field audit, data/evidence collection, work papers</td></tr>
+<tr><td>Department Coordinator</td><td>Data provision, query responses, compliance reporting</td></tr></table>
+<p><span class="b tbc">Role table partly cut off in source – verify with owner</span></p></div></div>
+<div class="card"><h3>Admin: User &amp; activity log <span class="fr">FR-003</span><span class="fr">FR-004</span></h3>
+<table><tr><th>Time</th><th>User</th><th>Role</th><th>Action</th></tr>
+<tr><td>10:42</td><td>R. Verma</td><td>Chief</td><td>Approved review – AUD-2026-014</td></tr>
+<tr><td>10:15</td><td>S. Khan</td><td>Junior</td><td>Uploaded evidence (GPS tagged)</td></tr>
+<tr><td>09:58</td><td>Dept Coord – PWD</td><td>Coordinator</td><td>Responded to query Q-221</td></tr></table></div>
+</div>
+<script>const s=document.getElementById("r");s.innerHTML=Object.entries(ROLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");s.value=role();</script>
+</body></html>

@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Traceability</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js"></script></head><body>
+<div class="main">
+<h2>SRS Traceability &amp; Open Decisions</h2><p class="sub">What the PoC demonstrates, and what we need from the client to proceed.</p>
+<div class="card"><h3>Requirement coverage</h3>
+<table><tr><th>SRS section</th><th>FR IDs</th><th>PoC page</th><th>Coverage</th></tr>
+<tr><td>3.1 User &amp; access</td><td>001–005</td><td>index, all (role switch)</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.2 Department mgmt</td><td>010–013</td><td>planning (Departments)</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.3 Audit planning</td><td>020–028</td><td>planning, dashboard</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.4 Execution</td><td>030–038</td><td>execution, mobile</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.5 Reporting</td><td>040–044</td><td>reports</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.6 Communication</td><td>050–053</td><td>execution (chat), toasts</td><td><span class="b warn">Partial (email is mock)</span></td></tr>
+<tr><td>3.7 Compliance</td><td>060–066</td><td>compliance</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.8 Dashboards/AI</td><td>070–075</td><td>dashboard, planning</td><td><span class="b warn">Mock AI</span></td></tr>
+<tr><td>3.9 Documents</td><td>080–084</td><td>reports (Repository)</td><td><span class="b ok">Demonstrated</span></td></tr>
+<tr><td>3.10 Mobile</td><td>090–095</td><td>mobile</td><td><span class="b ok">Simulated</span></td></tr>
+<tr><td>3.11 Integration</td><td>100–103</td><td>—</td><td><span class="b bad">Not in PoC (needs specs)</span></td></tr></table></div>
+<div class="grid g2">
+<div class="card"><h3>Decisions needed from client (SRS §6)</h3><ol>
+<li>Scope: all UP departments or a subset?</li><li>Authoritative SSO / identity service?</li><li>What to read/write with PFMS?</li><li>Audit types and workflows in Release 1?</li><li>Approval stages: observations, findings, reports?</li><li>Retention and security rules for evidence?</li><li>Languages (English/Hindi)?</li><li>AI functions and human-only decisions?</li><li>Mobile devices / OS?</li><li>Content on the cut-off pages?</li></ol></div>
+<div class="card"><h3>Non-functional requirements to define (§4)</h3><ul><li>Security, MFA, encryption</li><li>Availability, backup, DR (RTO/RPO)</li><li>Performance and concurrent users</li><li>Scalability: departments, users, documents</li><li>Accessibility and usability</li><li>Data retention and legal hold</li><li>AI governance and explainability</li><li>Interoperability standards, error/retry handling, data ownership</li></ul>
+<p class="note">The SRS gives no measurable values. We recommend a workshop to fix targets before design sign-off.</p></div></div>
+<div class="card"><h3>Delivery phases (SRS §5)</h3><div class="steps"><div class="done">1 System study</div><div class="cur">2 Requirements</div><div>3 Conceptualisation</div><div>4 Analysis &amp; design</div><div>5 DB modelling</div><div>6 Development</div><div>7 Testing</div><div>8 UAT</div><div>9 Deployment</div><div>10 Support</div></div></div>
+</div></body></html>
