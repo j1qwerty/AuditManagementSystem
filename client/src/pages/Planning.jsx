@@ -192,47 +192,199 @@ function PlanTable({ data, canManage, onEdit, onDelete }) {
 }
 
 /* ------------------------------------------------------------------ calendar */
+const MONTH_FULL = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const CAL_TYPE_COLOR = {
+  Financial: '#8b53ac',
+  Performance: '#0f9d6e',
+  Compliance: '#d97706',
+  IT: '#0488fb',
+  Forensic: '#ff3381',
+}
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const sameDay = (a, b) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate()
+
 function CalendarTab({ data }) {
   const fyStart = Number(config.fiscalYear.split('-')[0])
-  const quarters = [
-    { label: 'Q1 · Apr–Jun', months: [3, 4, 5] },
-    { label: 'Q2 · Jul–Sep', months: [6, 7, 8] },
-    { label: 'Q3 · Oct–Dec', months: [9, 10, 11] },
-    { label: 'Q4 · Jan–Mar', months: [0, 1, 2] }
-  ]
-  const typeColor = { Financial: '#8b53ac', Performance: '#0f9d6e', Compliance: '#d97706', IT: '#0488fb', Forensic: '#ff3381' }
+  const fyStartDate = new Date(fyStart, 3, 1)      // 1 Apr
+  const fyEndDate = new Date(fyStart + 1, 2, 31)   // 31 Mar
+  const today = startOfDay(new Date())
 
-  const inQuarter = (q) =>
-    data.audits.filter((a) => {
-      const m = new Date(a.startDate).getMonth()
-      const y = new Date(a.startDate).getFullYear()
-      if (q.months[0] === 3) return q.months.includes(m) && y === fyStart
-      return q.months.includes(m) && y === fyStart + 1
-    })
+  const [viewDate, setViewDate] = useState(() => {
+    if (today < fyStartDate || today > fyEndDate)
+      return new Date(fyStart, 3, 1)
+    return new Date(today.getFullYear(), today.getMonth(), 1)
+  })
+
+  // Pre-parse audits once
+  const audits = useMemo(
+    () => data.audits.map((a) => ({
+      ...a,
+      _start: startOfDay(new Date(a.startDate)),
+      _end: startOfDay(new Date(a.endDate)),
+      _color: CAL_TYPE_COLOR[a.type] || '#64748b',
+    })),
+    [data.audits]
+  )
+
+  // Fiscal-year months (Apr → Mar) for the pill quick-nav
+  const fyMonths = useMemo(() => {
+    const out = []
+    for (let i = 0; i < 12; i++) {
+      const m = (3 + i) % 12
+      const y = 3 + i < 12 ? fyStart : fyStart + 1
+      out.push({ month: m, year: y })
+    }
+    return out
+  }, [fyStart])
+
+  // Build 7-column grid, Monday-first
+  const grid = useMemo(() => {
+    const y = viewDate.getFullYear()
+    const m = viewDate.getMonth()
+    const first = new Date(y, m, 1)
+    const last = new Date(y, m + 1, 0)
+    const lead = (first.getDay() + 6) % 7 // Mon = 0
+
+    const cells = []
+    for (let i = lead; i > 0; i--) cells.push({ date: new Date(y, m, 1 - i), outside: true })
+    for (let d = 1; d <= last.getDate(); d++) cells.push({ date: new Date(y, m, d), outside: false })
+
+    let d = 1
+    while (cells.length % 7 !== 0) cells.push({ date: new Date(y, m + 1, d++), outside: true })
+    return cells
+  }, [viewDate])
+
+  const monthAudits = useMemo(() => {
+    const y = viewDate.getFullYear(), m = viewDate.getMonth()
+    const mStart = new Date(y, m, 1), mEnd = new Date(y, m + 1, 0)
+    return audits.filter((a) => a._end >= mStart && a._start <= mEnd)
+  }, [audits, viewDate])
+
+  const auditsOn = (date) => audits.filter((a) => a._start <= date && a._end >= date)
+  const shiftMonth = (delta) =>
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1))
+  const jumpTo = (month, year) => setViewDate(new Date(year, month, 1))
+  const goToday = () =>
+    setViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
 
   return (
-    <div className="grid grid-4">
-      {quarters.map((q, qi) => (
-        <div className="card" key={qi}>
-          <div className="card-head"><h3>{q.label}</h3><span className="hint">{inQuarter(q).length} audits</span></div>
-          <div className="card-pad flex-col" style={{ gap: 8 }}>
-            {inQuarter(q).length === 0 && <div className="muted small center" style={{ padding: '14px 0' }}>No audits scheduled</div>}
-            {inQuarter(q).map((a) => (
-              <div
-                key={a.id}
-                className="card-pad card-hover clickable"
-                style={{ padding: '8px 10px', borderLeft: `3px solid ${typeColor[a.type]}`, borderRadius: 8 }}
-                onClick={() => navigate(`/audit/${a.id}`)}
-                title={`${a.code} — open audit`}
-              >
-                <div className="bold tiny">{a.code}</div>
-                <div className="small ellipsis" style={{ color: 'var(--text-2)' }} title={a.title}>{a.title}</div>
-                <div className="muted tiny">{fmtDate(a.startDate)} → {fmtDate(a.endDate)}</div>
-              </div>
-            ))}
-          </div>
+    <div className="card">
+      <style>{`
+        .cal-wrap { padding: 16px; }
+        .cal-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+        .cal-title { font-size:18px; font-weight:600; min-width: 180px; }
+        .cal-btn { display:inline-flex; align-items:center; justify-content:center;
+          min-width:32px; height:32px; padding:0 10px; border-radius:8px;
+          border:1px solid var(--border, #e5e7eb); background:transparent; color:var(--text, #111827); cursor:pointer; font-size:13px; }
+        .cal-btn:hover { background: var(--bg-2, #f3f4f6); }
+        .cal-pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+        .cal-pill { padding:4px 12px; border-radius:999px; font-size:12px;
+          border:1px solid var(--border, #e5e7eb); background:transparent; color:var(--text-2, #4b5563); cursor:pointer; }
+        .cal-pill:hover { background: var(--bg-2, #f3f4f6); color: var(--text, #111827); }
+        .cal-pill.active { background: var(--primary, #6366f1); color:#fff; border-color: transparent; }
+        .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+        .cal-wd { font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+          color:var(--text-3, #9ca3af); text-align:center; padding:4px 0; }
+        .cal-cell { min-height: 100px; border-radius:10px; border:1px solid var(--border, #e5e7eb);
+          background:var(--bg, #fff); padding:6px; display:flex; flex-direction:column;
+          gap:4px; overflow:hidden; }
+        .cal-cell.outside { opacity:.35; }
+        .cal-cell.today { border-color: var(--primary, #6366f1);
+          box-shadow: 0 0 0 1px var(--primary, #6366f1) inset; }
+        .cal-num { font-size:12px; font-weight:600; color:var(--text-2, #4b5563); }
+        .cal-cell.today .cal-num { color: var(--primary, #6366f1); }
+        .cal-events { display:flex; flex-direction:column; gap:3px; overflow:hidden; }
+        .cal-chip { display:flex; align-items:center; gap:4px; min-height:14px;
+          font-size:10.5px; padding:1px 4px; border-radius:4px; cursor:pointer;
+          white-space:nowrap; overflow:hidden; line-height:1.2; }
+        .cal-chip:hover { filter: brightness(1.08); }
+        .cal-more { font-size:10px; color:var(--text-3, #9ca3af); padding-left:2px; }
+        .cal-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:16px;
+          font-size:11px; color:var(--text-2, #4b5563); }
+        .cal-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+      `}</style>
+
+      <div className="cal-wrap">
+        {/* Toolbar */}
+        <div className="cal-toolbar">
+          <button className="cal-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
+          <button className="cal-btn" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
+          <div className="cal-title">{MONTH_FULL[viewDate.getMonth()]} {viewDate.getFullYear()}</div>
+          <button className="cal-btn" onClick={goToday}>Today</button>
+          <span className="hint" style={{ marginLeft: 'auto' }}>
+            {monthAudits.length} audit{monthAudits.length === 1 ? '' : 's'} this month
+          </span>
         </div>
-      ))}
+
+        {/* Fiscal-year month pills */}
+        <div className="cal-pills">
+          {fyMonths.map(({ month, year }) => {
+            const active = viewDate.getMonth() === month && viewDate.getFullYear() === year
+            return (
+              <button
+                key={`${year}-${month}`}
+                className={`cal-pill ${active ? 'active' : ''}`}
+                onClick={() => jumpTo(month, year)}
+              >
+                {MONTH_FULL[month].slice(0, 3)}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Grid */}
+        <div className="cal-grid">
+          {WEEKDAYS.map((w) => <div key={w} className="cal-wd">{w}</div>)}
+
+          {grid.map(({ date, outside }, i) => {
+            const dayAudits = outside ? [] : auditsOn(date)
+            const isToday = sameDay(date, today)
+            return (
+              <div key={i} className={`cal-cell ${outside ? 'outside' : ''} ${isToday ? 'today' : ''}`}>
+                <div className="cal-num">{date.getDate()}</div>
+                <div className="cal-events">
+                  {dayAudits.slice(0, 3).map((a) => {
+                    const isStart = sameDay(date, a._start)
+                    return (
+                      <div
+                        key={a.id}
+                        className="cal-chip"
+                        style={{
+                          background: `${a._color}1a`,
+                          borderLeft: `3px solid ${a._color}`,
+                          color: a._color,
+                        }}
+                        onClick={() => navigate(`/audit/${a.id}`)}
+                        title={`${a.code} — ${a.title}\n${fmtDate(a.startDate)} → ${fmtDate(a.endDate)}`}
+                      >
+                        {isStart ? a.code : ''}
+                      </div>
+                    )
+                  })}
+                  {dayAudits.length > 3 && (
+                    <div className="cal-more">+{dayAudits.length - 3} more</div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="cal-legend">
+          {Object.entries(CAL_TYPE_COLOR).map(([type, color]) => (
+            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="cal-dot" style={{ background: color }} />
+              {type}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

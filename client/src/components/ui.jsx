@@ -251,7 +251,7 @@ export function Pagination({ page, pages, onPage, total, pageSize, onPageSize })
         <button className="btn-icon" disabled={page <= 1} onClick={() => onPage(page - 1)} title="Previous page">‹</button>
         {start > 1 && <span className="muted small">…</span>}
         {pageBtns.map((p) => (
-          <button key={p} className={cx('btn-icon', p === page && 'btn-primary')} style={p === page ? { color: '#fff' } : {}} onClick={() => onPage(p)}>{p}</button>
+          <button key={p} className={cx('btn-icon', p === page && 'btn-primary')} onClick={() => onPage(p)}>{p}</button>
         ))}
         {end < pages && <span className="muted small">…</span>}
         <button className="btn-icon" disabled={page >= pages} onClick={() => onPage(page + 1)} title="Next page">›</button>

@@ -8,47 +8,63 @@ import { canModule, ROLES } from '../lib/permissions'
 import { Avatar, Badge, useClickOutside, ToastStack } from './ui'
 import { fmtRelative } from '../lib/utils'
 import config from '../lib/config'
+import { Widget5Icon } from '@solar-icons/react/linear/widget-5'
+import { CalendarDateIcon } from '@solar-icons/react/linear/calendar-date'
+import { ClipboardListIcon } from '@solar-icons/react/linear/clipboard-list'
+import { DangerTriangleIcon } from '@solar-icons/react/linear/danger-triangle'
+import { ShieldCheckIcon } from '@solar-icons/react/linear/shield-check'
+import { ChartIcon } from '@solar-icons/react/linear/chart'
+import { DocumentTextIcon } from '@solar-icons/react/linear/document-text'
+import { Buildings2Icon } from '@solar-icons/react/linear/buildings-2'
+import { UsersGroupRoundedIcon } from '@solar-icons/react/linear/users-group-rounded'
+import { DocumentsIcon } from '@solar-icons/react/linear/documents'
+import { UsersGroupTwoRoundedIcon } from '@solar-icons/react/linear/users-group-two-rounded'
+import { HistoryIcon } from '@solar-icons/react/linear/history'
+import { SettingsIcon } from '@solar-icons/react/linear/settings'
+import { QuestionCircleIcon } from '@solar-icons/react/linear/question-circle'
+import { BellIcon } from '@solar-icons/react/linear/bell'
+import { ChatRoundIcon } from '@solar-icons/react/linear/chat-round'
+import { UserCircleIcon } from '@solar-icons/react/linear/user-circle'
+import { LogoutIcon } from '@solar-icons/react/linear/logout'
 
 const NAV = [
-  { group: null, items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦', to: '/dashboard' }] },
+  { group: null, items: [{ key: 'dashboard', label: 'Dashboard', Icon: Widget5Icon, to: '/dashboard' }] },
   {
     group: 'Auditing',
     items: [
-      { key: 'planning', label: 'Audit Planning', icon: '▤', to: '/planning', module: 'planning' },
-      { key: 'audits', label: 'Audits', icon: '☰', to: '/audits' },
-      { key: 'findings', label: 'Findings', icon: '!', to: '/findings' },
-      { key: 'compliance', label: 'Compliance', icon: '✓', to: '/compliance' }
+      { key: 'planning', label: 'Audit Planning', Icon: CalendarDateIcon, to: '/planning', module: 'planning' },
+      { key: 'audits', label: 'Audits', Icon: ClipboardListIcon, to: '/audits' },
+      { key: 'findings', label: 'Findings', Icon: DangerTriangleIcon, to: '/findings' },
+      { key: 'compliance', label: 'Compliance', Icon: ShieldCheckIcon, to: '/compliance' }
     ]
   },
   {
     group: 'Insights',
     items: [
-      { key: 'analytics', label: 'Analytics & Risk', icon: '◔', to: '/analytics', module: 'analytics' },
-      { key: 'reports', label: 'Reports', icon: '▥', to: '/reports' }
+      { key: 'analytics', label: 'Analytics & Risk', Icon: ChartIcon, to: '/analytics', module: 'analytics' },
+      { key: 'reports', label: 'Reports', Icon: DocumentTextIcon, to: '/reports' }
     ]
   },
   {
     group: 'Workspace',
     items: [
-      { key: 'departments', label: 'Departments', icon: '⌂', to: '/departments' },
-      { key: 'teams', label: 'Teams', icon: '◉', to: '/teams', module: 'teams' },
-      { key: 'documents', label: 'Documents', icon: '▤', to: '/documents' },
-      { key: 'messages', label: 'Messages', icon: '✉', to: '/messages' }
+      { key: 'departments', label: 'Departments', Icon: Buildings2Icon, to: '/departments' },
+      { key: 'teams', label: 'Teams', Icon: UsersGroupRoundedIcon, to: '/teams', module: 'teams' },
+      { key: 'documents', label: 'Documents', Icon: DocumentsIcon, to: '/documents' }
     ]
   },
   {
     group: 'Administration',
     items: [
-      { key: 'users', label: 'Users & Roles', icon: '◍', to: '/users', module: 'users' },
-      { key: 'activity', label: 'Activity Log', icon: '🕘', to: '/activity', module: 'activity' },
-      { key: 'settings', label: 'Settings', icon: '⚙', to: '/settings', module: 'settings' }
+      { key: 'users', label: 'Users & Roles', Icon: UsersGroupTwoRoundedIcon, to: '/users', module: 'users' },
+      { key: 'activity', label: 'Activity Log', Icon: HistoryIcon, to: '/activity', module: 'activity' },
+      { key: 'settings', label: 'Settings', Icon: SettingsIcon, to: '/settings', module: 'settings' }
     ]
   },
   {
     group: 'Help',
     items: [
-      { key: 'profile', label: 'My Profile', icon: '◕', to: '/profile' },
-      { key: 'guide', label: 'Project Guide', icon: '?', to: '/guide', module: 'guide' }
+      { key: 'guide', label: 'Project Guide', Icon: QuestionCircleIcon, to: '/guide' }
     ]
   }
 ]
@@ -148,9 +164,10 @@ export function AppLayout({ children }) {
                 {items.map((it) => {
                   const isActive = activeModule === it.to || (it.to === '/audits' && path.startsWith('/audit/')) || (it.to === '/departments' && path.startsWith('/department/'))
                   const count = it.key === 'audits' ? counts.activeAudits : it.key === 'findings' ? counts.openFindings : it.key === 'compliance' ? counts.overdue : it.key === 'messages' ? counts.unreadMsg : null
+                  const Icon = it.Icon
                   return (
                     <Link key={it.key} to={it.to} className={`nav-item ${isActive ? 'active' : ''}`}>
-                      <span className="ico">{it.icon}</span>
+                      <span className="ico"><Icon size={18} /></span>
                       <span>{it.label}</span>
                       {count > 0 && <span className="count">{count}</span>}
                     </Link>
@@ -200,7 +217,7 @@ export function AppLayout({ children }) {
 
           <div className="dropdown-wrap" ref={notifRef}>
             <button className="topbar-icon-btn" onClick={() => setNotifOpen((o) => !o)} title="Notifications">
-              ✉
+              <BellIcon size={19} />
               {unreadCount > 0 && <span className="dot">{unreadCount}</span>}
             </button>
             {notifOpen && (
@@ -233,7 +250,7 @@ export function AppLayout({ children }) {
 
           <div className="dropdown-wrap">
             <button className="topbar-icon-btn" title="Messages" onClick={() => navigate('/messages')}>
-              ⌨
+              <ChatRoundIcon size={19} />
               {counts.unreadMsg > 0 && <span className="dot" style={{ background: 'var(--sky-500)' }}>{counts.unreadMsg}</span>}
             </button>
           </div>
@@ -253,12 +270,16 @@ export function AppLayout({ children }) {
                   <div style={{ fontSize: 11.5, fontWeight: 500 }}>{currentUser.email}</div>
                   <div style={{ marginTop: 3 }}><Badge kind={role ? role.label : ''}>{role ? role.label : ''}</Badge></div>
                 </div>
-                <Link className="menu-item" to="/profile" onClick={() => setUserMenuOpen(false)}>◕ My Profile</Link>
+                <Link className="menu-item" to="/profile" onClick={() => setUserMenuOpen(false)}>
+                  <UserCircleIcon size={16} /> My Profile
+                </Link>
                 {canModule(currentUser, 'guide') && (
-                  <Link className="menu-item" to="/guide" onClick={() => setUserMenuOpen(false)}>? Project Guide</Link>
+                  <Link className="menu-item" to="/guide" onClick={() => setUserMenuOpen(false)}>
+                    <QuestionCircleIcon size={16} /> Project Guide
+                  </Link>
                 )}
                 <button className="menu-item" style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontWeight: 600 }} onClick={logout}>
-                  ⏻ Sign out
+                  <LogoutIcon size={16} /> Sign out
                 </button>
               </div>
             )}

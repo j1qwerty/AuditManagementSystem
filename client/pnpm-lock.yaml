@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@solar-icons/react':
+        specifier: ^2.6.0
+        version: 2.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -406,6 +409,17 @@ packages:
     resolution: {integrity: sha512-DkUnrmo6oUZPDK6O6LOXLcEx8BZ85I8qkJLZWoSaOBHPqJfYzTtqweyoSxPpePG7XQvFkFEcSgVvHWRnuiXIcw==}
     cpu: [x64]
     os: [win32]
+
+  '@solar-icons/react@2.6.0':
+    resolution: {integrity: sha512-H6rHAoDef+uNsTPOiY3BHEOMrNlB/C7kb1ul1oHN695XRQjYOSDwglYP/RXELu0omXydL+yB7vaNjkHqlEwlig==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/react': '>= 16.8'
+      react: '>= 16.8'
+      react-dom: '>= 16.8'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -863,6 +877,11 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.68.6':
     optional: true
+
+  '@solar-icons/react@2.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@types/babel__core@7.20.5':
     dependencies:
