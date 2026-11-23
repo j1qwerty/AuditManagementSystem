@@ -205,187 +205,489 @@ const CAL_TYPE_COLOR = {
   IT: '#0488fb',
   Forensic: '#ff3381',
 }
-const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+
+const startOfDay = (date) => {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
 const sameDay = (a, b) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate()
+const inAuditWindow = (audit, date) => audit._start <= date && audit._end >= date
+const dateLabel = (date) => date.toLocaleDateString('en-IN', {
+  day: 'numeric', month: 'long', year: 'numeric', weekday: 'long',
+})
+
+// Build calendar rows only for the month view.
+function calendarCells(year, month, fixedRows = false) {
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7
+  const days = new Date(year, month + 1, 0).getDate()
+  const length = fixedRows ? 42 : Math.ceil((offset + days) / 7) * 7
+  return Array.from({ length }, (_, index) => {
+    const date = new Date(year, month, index - offset + 1)
+    return { date, outside: index < offset || index >= offset + days }
+  })
+}
 
 function CalendarTab({ data }) {
   const fyStart = Number(config.fiscalYear.split('-')[0])
-  const fyStartDate = new Date(fyStart, 3, 1)      // 1 Apr
-  const fyEndDate = new Date(fyStart + 1, 2, 31)   // 31 Mar
   const today = startOfDay(new Date())
+  const initialFY = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
 
-  const [viewDate, setViewDate] = useState(() => {
-    if (today < fyStartDate || today > fyEndDate)
-      return new Date(fyStart, 3, 1)
-    return new Date(today.getFullYear(), today.getMonth(), 1)
-  })
-
-  // Pre-parse audits once
-  const audits = useMemo(
-    () => data.audits.map((a) => ({
-      ...a,
-      _start: startOfDay(new Date(a.startDate)),
-      _end: startOfDay(new Date(a.endDate)),
-      _color: CAL_TYPE_COLOR[a.type] || '#64748b',
-    })),
-    [data.audits]
+  const [viewDate, setViewDate] = useState(() =>
+    new Date(
+      initialFY === fyStart ? today.getFullYear() : fyStart,
+      initialFY === fyStart ? today.getMonth() : 3,
+      1
+    )
   )
+  const [selectedDate, setSelectedDate] = useState(() =>
+    initialFY === fyStart ? today : new Date(fyStart, 3, 1)
+  )
+  const [mode, setMode] = useState('month')
+  const [fullscreen, setFullscreen] = useState(false)
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState('')
 
-  // Fiscal-year months (Apr → Mar) for the pill quick-nav
-  const fyMonths = useMemo(() => {
-    const out = []
-    for (let i = 0; i < 12; i++) {
-      const m = (3 + i) % 12
-      const y = 3 + i < 12 ? fyStart : fyStart + 1
-      out.push({ month: m, year: y })
+  useEffect(() => {
+    if (!fullscreen) return undefined
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setFullscreen(false)
     }
-    return out
-  }, [fyStart])
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previous
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [fullscreen])
 
-  // Build 7-column grid, Monday-first
-  const grid = useMemo(() => {
-    const y = viewDate.getFullYear()
-    const m = viewDate.getMonth()
-    const first = new Date(y, m, 1)
-    const last = new Date(y, m + 1, 0)
-    const lead = (first.getDay() + 6) % 7 // Mon = 0
+  const audits = useMemo(() => data.audits.flatMap((audit) => {
+    const start = startOfDay(audit.startDate)
+    const end = startOfDay(audit.endDate)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return []
+    return [{ ...audit, _start: start, _end: end, _color: CAL_TYPE_COLOR[audit.type] || '#64748b' }]
+  }), [data.audits])
 
-    const cells = []
-    for (let i = lead; i > 0; i--) cells.push({ date: new Date(y, m, 1 - i), outside: true })
-    for (let d = 1; d <= last.getDate(); d++) cells.push({ date: new Date(y, m, d), outside: false })
+  const filteredAudits = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return audits.filter((a) =>
+      (typeFilter === 'all' || a.type === typeFilter) &&
+      (statusFilter === 'all' || a.status === statusFilter) &&
+      (!term || [a.code, a.title, a.departmentName, a.leadAuditorName]
+        .some((value) => String(value || '').toLowerCase().includes(term)))
+    )
+  }, [audits, typeFilter, statusFilter, search])
 
-    let d = 1
-    while (cells.length % 7 !== 0) cells.push({ date: new Date(y, m + 1, d++), outside: true })
-    return cells
-  }, [viewDate])
+  const viewFyStart = viewDate.getMonth() >= 3 ? viewDate.getFullYear() : viewDate.getFullYear() - 1
+  const yearMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => {
+    const absoluteMonth = 3 + index
+    return { month: absoluteMonth % 12, year: viewFyStart + Math.floor(absoluteMonth / 12) }
+  }), [viewFyStart])
 
-  const monthAudits = useMemo(() => {
-    const y = viewDate.getFullYear(), m = viewDate.getMonth()
-    const mStart = new Date(y, m, 1), mEnd = new Date(y, m + 1, 0)
-    return audits.filter((a) => a._end >= mStart && a._start <= mEnd)
-  }, [audits, viewDate])
+  const yearData = useMemo(() => yearMonths.map(({ month, year }) => {
+    const monthStart = new Date(year, month, 1)
+    const monthEnd = new Date(year, month + 1, 0)
+    // Include audits that overlap the month. Ongoing audits appear first, followed
+    // by new starts in date order. Preserve the chronological audit sequence.
+    const items = filteredAudits
+      .filter((a) => a._start <= monthEnd && a._end >= monthStart)
+      .sort((a, b) =>
+        Math.max(a._start.getTime(), monthStart.getTime()) - Math.max(b._start.getTime(), monthStart.getTime()) ||
+        a._start - b._start ||
+        a._end - b._end ||
+        String(a.code || '').localeCompare(String(b.code || '')))
+    const startingCount = items.filter((a) => a._start >= monthStart && a._start <= monthEnd).length
+    return { month, year, items, startingCount }
+  }), [yearMonths, filteredAudits])
 
-  const auditsOn = (date) => audits.filter((a) => a._start <= date && a._end >= date)
-  const shiftMonth = (delta) =>
-    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1))
-  const jumpTo = (month, year) => setViewDate(new Date(year, month, 1))
-  const goToday = () =>
-    setViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
+  const fyFirst = new Date(viewFyStart, 3, 1)
+  const fyLast = new Date(viewFyStart + 1, 2, 31)
+  const fyAudits = useMemo(() => filteredAudits.filter((a) => a._start <= fyLast && a._end >= fyFirst),
+    [filteredAudits, viewFyStart])
+  const fyStarting = fyAudits.filter((a) => a._start >= fyFirst && a._start <= fyLast).length
+  const departmentsCovered = new Set(fyAudits.map((a) => a.departmentId).filter(Boolean)).size
+
+  const monthCells = useMemo(() => calendarCells(viewDate.getFullYear(), viewDate.getMonth()), [viewDate])
+  const monthInfo = yearData.find((entry) => entry.month === viewDate.getMonth() && entry.year === viewDate.getFullYear())
+  const monthAudits = monthInfo?.items || []
+  const selectedAudits = filteredAudits.filter((a) => inAuditWindow(a, selectedDate))
+    .sort((a, b) => a._start - b._start)
+
+  const jumpTo = (month, year, day = 1) => {
+    setViewDate(new Date(year, month, 1))
+    setSelectedDate(new Date(year, month, day))
+  }
+  const shiftMonth = (delta) => {
+    const next = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1)
+    jumpTo(next.getMonth(), next.getFullYear())
+  }
+  const shiftYear = (delta) => jumpTo(viewDate.getMonth(), viewDate.getFullYear() + delta)
+  const goToday = () => jumpTo(today.getMonth(), today.getFullYear(), today.getDate())
+  const goThisFy = () => {
+    const year = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
+    jumpTo(3, year)
+  }
+  const switchMode = (nextMode) => {
+    setMode(nextMode)
+    // The year view opens at viewport width instead of being squeezed into a page card.
+    setFullscreen(nextMode === 'year')
+  }
+  const openMonth = (month, year, day = 1) => {
+    jumpTo(month, year, day)
+    setMode('month')
+    setFullscreen(false)
+  }
 
   return (
-    <div className="card">
+    <div className={`card cal-shell ${fullscreen ? 'cal-fullscreen' : ''}`}>
       <style>{`
-        .cal-wrap { padding: 16px; }
-        .cal-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-        .cal-title { font-size:18px; font-weight:600; min-width: 180px; }
-        .cal-btn { display:inline-flex; align-items:center; justify-content:center;
-          min-width:32px; height:32px; padding:0 10px; border-radius:8px;
-          border:1px solid var(--border, #e5e7eb); background:transparent; color:var(--text, #111827); cursor:pointer; font-size:13px; }
-        .cal-btn:hover { background: var(--bg-2, #f3f4f6); }
-        .cal-pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
-        .cal-pill { padding:4px 12px; border-radius:999px; font-size:12px;
-          border:1px solid var(--border, #e5e7eb); background:transparent; color:var(--text-2, #4b5563); cursor:pointer; }
-        .cal-pill:hover { background: var(--bg-2, #f3f4f6); color: var(--text, #111827); }
-        .cal-pill.active { background: var(--primary, #6366f1); color:#fff; border-color: transparent; }
-        .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-        .cal-wd { font-size:11px; text-transform:uppercase; letter-spacing:.06em;
-          color:var(--text-3, #9ca3af); text-align:center; padding:4px 0; }
-        .cal-cell { min-height: 100px; border-radius:10px; border:1px solid var(--border, #e5e7eb);
-          background:var(--bg, #fff); padding:6px; display:flex; flex-direction:column;
-          gap:4px; overflow:hidden; }
-        .cal-cell.outside { opacity:.35; }
-        .cal-cell.today { border-color: var(--primary, #6366f1);
-          box-shadow: 0 0 0 1px var(--primary, #6366f1) inset; }
-        .cal-num { font-size:12px; font-weight:600; color:var(--text-2, #4b5563); }
-        .cal-cell.today .cal-num { color: var(--primary, #6366f1); }
-        .cal-events { display:flex; flex-direction:column; gap:3px; overflow:hidden; }
-        .cal-chip { display:flex; align-items:center; gap:4px; min-height:14px;
-          font-size:10.5px; padding:1px 4px; border-radius:4px; cursor:pointer;
-          white-space:nowrap; overflow:hidden; line-height:1.2; }
-        .cal-chip:hover { filter: brightness(1.08); }
-        .cal-more { font-size:10px; color:var(--text-3, #9ca3af); padding-left:2px; }
-        .cal-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:16px;
-          font-size:11px; color:var(--text-2, #4b5563); }
-        .cal-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+        .cal-shell { width:100%; max-width:none; min-width:0; overflow:visible; container: audit-calendar / inline-size; }
+        .cal-shell.cal-fullscreen { position:fixed; inset:0; z-index:1100; overflow:auto;
+          border:0; border-radius:0; background:var(--bg, #f8fafc); }
+        .cal-wrap { padding:20px; min-width:0; }
+        .cal-fullscreen .cal-wrap { width:100%; margin:0 auto; padding:26px 32px 36px; }
+        .cal-toolbar { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between;
+          gap:14px; margin-bottom:16px; }
+        .cal-navigation, .cal-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .cal-heading { min-width:190px; margin:0 6px; }
+        .cal-title { font-size:19px; font-weight:750; letter-spacing:-.025em; color:var(--text, #111827); }
+        .cal-subtitle { margin-top:2px; font-size:11px; color:var(--text-3, #64748b); }
+        .cal-btn { display:inline-flex; justify-content:center; align-items:center; gap:6px;
+          min-height:35px; padding:0 11px; border-radius:8px; border:1px solid var(--border, #e5e7eb);
+          background:var(--surface, #fff); color:var(--text, #111827); cursor:pointer; font-size:12px; font-weight:600; }
+        .cal-btn:hover { background:var(--bg-2, #f3f4f6); }
+        .cal-btn:focus-visible, .cal-year-head:focus-visible, .cal-year-item:focus-visible,
+        .cal-day-button:focus-visible, .cal-chip:focus-visible { outline:2px solid var(--primary, #6366f1); outline-offset:2px; }
+        .cal-btn-arrow { min-width:36px; font-size:20px; line-height:1; padding:0; }
+        .cal-toggle { display:inline-flex; align-items:center; padding:3px; gap:2px;
+          border:1px solid var(--border, #e5e7eb); border-radius:9px; background:var(--bg-2, #f3f4f6); }
+        .cal-toggle button { border:0; background:transparent; color:var(--text-2, #4b5563);
+          padding:7px 13px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:650; }
+        .cal-toggle button.active { background:var(--surface, #fff); color:var(--primary, #6366f1);
+          box-shadow:0 1px 3px rgba(0,0,0,.09); }
+        .cal-filters { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:16px; }
+        .cal-filter-search, .cal-filter-select { height:36px; border:1px solid var(--border, #e5e7eb);
+          border-radius:8px; color:var(--text, #111827); background:var(--surface, #fff);
+          font:inherit; font-size:12px; padding:0 11px; min-width:0; }
+        .cal-filter-search { flex:1 1 220px; max-width:390px; }
+        .cal-filter-select { flex:0 1 155px; }
+        .cal-filter-note { align-self:center; font-size:11px; color:var(--text-3, #64748b); margin-left:auto; }
+        .cal-summary { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+        .cal-summary-item { border:1px solid var(--border, #e5e7eb); background:var(--surface, #fff);
+          border-radius:11px; padding:12px 16px; min-width:0; }
+        .cal-summary-label { font-size:11px; color:var(--text-3, #64748b); }
+        .cal-summary-number { font-size:25px; font-weight:750; letter-spacing:-.035em; line-height:1.25;
+          color:var(--text, #111827); font-variant-numeric:tabular-nums; }
+        .cal-year-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:16px; align-items:stretch; }
+        .cal-year-month { min-width:0; display:flex; flex-direction:column; overflow:hidden;
+          border:1px solid var(--border, #e5e7eb); border-radius:12px;
+          background:var(--surface, #fff); }
+        .cal-year-month.current { border-color:var(--primary, #6366f1); }
+        .cal-year-head { width:100%; display:flex; justify-content:space-between; align-items:center;
+          gap:12px; padding:15px 16px; border:0; border-bottom:1px solid var(--border, #e5e7eb);
+          background:var(--bg-2, #f8fafc); color:var(--text, #111827); text-align:left; cursor:pointer; }
+        .cal-year-head:hover { background:var(--primary-soft, #eef2ff); }
+        .cal-year-name { display:flex; flex-wrap:wrap; align-items:baseline; gap:7px; min-width:0;
+          font-size:16px; font-weight:750; }
+        .cal-year-head-year { font-size:11px; color:var(--text-3, #64748b); font-weight:500; }
+        .cal-year-count { display:inline-flex; flex-shrink:0; align-items:center; gap:7px;
+          font-size:11px; font-weight:650; color:var(--text-2, #475569); }
+        .cal-year-count-number { background:var(--surface, #fff); border:1px solid var(--border, #e5e7eb);
+          border-radius:20px; padding:3px 9px; white-space:nowrap; }
+        .cal-year-chevron { font-size:19px; line-height:1; font-weight:400; }
+        .cal-year-subhead { padding:9px 16px; color:var(--text-3, #64748b); font-size:11px;
+          border-bottom:1px solid var(--border, #e5e7eb); }
+        .cal-year-list { flex:1; display:flex; flex-direction:column; gap:0; padding:4px 10px 10px; }
+        .cal-year-item { width:100%; display:flex; align-items:flex-start; gap:10px;
+          padding:11px 7px; background:transparent; border:0;
+          border-bottom:1px solid var(--border, #e5e7eb); color:var(--text, #111827);
+          text-align:left; cursor:pointer; min-width:0; }
+        .cal-year-item:last-child { border-bottom:0; }
+        .cal-year-item:hover { background:var(--bg-2, #f3f4f6); border-radius:7px; }
+        .cal-year-date { flex:0 0 51px; display:flex; flex-direction:column; align-items:center;
+          justify-content:center; gap:1px; padding:5px 3px; min-height:46px;
+          border:1px solid var(--border, #e5e7eb); border-top:3px solid;
+          border-radius:7px; color:var(--text-2, #4b5563); background:var(--surface, #fff);
+          font-variant-numeric:tabular-nums; }
+        .cal-year-date-day { font-size:18px; font-weight:750; line-height:1.1; }
+        .cal-year-date-month { font-size:9px; color:var(--text-3, #64748b); }
+        .cal-year-date-cont { font-size:9px; font-weight:650; line-height:1.2; }
+        .cal-year-details { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+        .cal-year-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+        .cal-year-code { font-size:11px; font-weight:750; }
+        .cal-year-status { font-size:9px; border-radius:4px; padding:2px 5px;
+          background:var(--bg-2, #f1f5f9); color:var(--text-2, #64748b); }
+        .cal-year-title { font-size:12px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
+        .cal-year-meta { font-size:10px; color:var(--text-3, #64748b); line-height:1.4; overflow-wrap:anywhere; }
+        .cal-year-empty { flex:1; display:flex; align-items:center; justify-content:center;
+          min-height:90px; padding:16px; font-size:12px; color:var(--text-3, #64748b); }
+        .cal-pills { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; }
+        .cal-pill { border:1px solid var(--border, #e5e7eb); background:var(--surface, #fff);
+          color:var(--text-2, #4b5563); padding:6px 12px; border-radius:18px; font-size:11px; cursor:pointer; }
+        .cal-pill.active { border-color:transparent; background:var(--primary, #6366f1); color:#fff; }
+        .cal-month-layout { display:grid; grid-template-columns:minmax(0,1fr) 275px; gap:16px; align-items:start; }
+        .cal-month-board { min-width:0; }
+        .cal-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+        .cal-wd { text-align:center; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+          font-weight:650; color:var(--text-3, #94a3b8); padding:3px 0; }
+        .cal-cell { min-width:0; min-height:115px; padding:7px; display:flex; flex-direction:column;
+          gap:5px; border:1px solid var(--border, #e5e7eb); border-radius:9px; background:var(--surface, #fff); }
+        .cal-cell.outside { background:var(--bg-2, #f8fafc); opacity:.45; }
+        .cal-cell.today { border-color:var(--primary, #6366f1); }
+        .cal-cell.selected { outline:2px solid var(--primary, #6366f1); outline-offset:-2px; }
+        .cal-day-button { display:flex; justify-content:space-between; align-items:center; width:100%;
+          padding:0; border:0; background:transparent; color:var(--text-2, #475569);
+          cursor:pointer; text-align:left; font-weight:650; font-size:12px; }
+        .cal-cell.today .cal-day-button { color:var(--primary, #6366f1); }
+        .cal-day-active { font-size:9px; color:var(--text-3, #64748b); font-weight:500; white-space:nowrap; }
+        .cal-events { display:flex; flex-direction:column; gap:3px; min-width:0; }
+        .cal-chip { display:block; width:100%; text-align:left; border:0; border-left:3px solid;
+          border-radius:4px; padding:4px 5px; cursor:pointer; white-space:nowrap; overflow:hidden;
+          text-overflow:ellipsis; font-size:10px; font-weight:650; }
+        .cal-more { padding:2px; font-size:10px; color:var(--text-3, #64748b); }
+        .cal-agenda { position:sticky; top:12px; border:1px solid var(--border, #e5e7eb);
+          border-radius:11px; background:var(--surface, #fff); overflow:hidden; }
+        .cal-agenda-head { padding:14px; border-bottom:1px solid var(--border, #e5e7eb); }
+        .cal-agenda-date { margin-top:4px; font-size:12px; color:var(--text-2, #475569); }
+        .cal-agenda-body { padding:10px; display:flex; flex-direction:column; gap:7px; max-height:560px; overflow:auto; }
+        .cal-agenda-item { text-align:left; cursor:pointer; background:var(--bg-2, #f8fafc);
+          border:1px solid var(--border, #e5e7eb); border-left:3px solid;
+          padding:9px; border-radius:7px; color:var(--text, #111827); }
+        .cal-agenda-item:hover { border-color:var(--primary, #6366f1); }
+        .cal-agenda-code { font-size:11px; font-weight:750; }
+        .cal-agenda-title { margin:4px 0; font-size:11px; line-height:1.35; }
+        .cal-agenda-meta { font-size:10px; color:var(--text-3, #64748b); }
+        .cal-empty { font-size:12px; color:var(--text-3, #64748b); padding:16px 8px; }
+        .cal-legend { display:flex; flex-wrap:wrap; align-items:center; gap:7px 17px;
+          margin-top:17px; color:var(--text-2, #64748b); font-size:11px; }
+        .cal-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .cal-legend-item { display:inline-flex; align-items:center; gap:6px; }
+        .cal-legend-note { margin-left:auto; color:var(--text-3, #94a3b8); }
+        @container audit-calendar (min-width:1550px) { .cal-year-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+        @container audit-calendar (max-width:1050px) { .cal-year-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @container audit-calendar (max-width:950px) {
+          .cal-month-layout { grid-template-columns:1fr; } .cal-agenda { position:static; } }
+        @container audit-calendar (max-width:640px) { .cal-year-grid { grid-template-columns:1fr; } }
+        @media (max-width:980px) { .cal-fullscreen .cal-wrap { padding:20px; } }
+        @media (max-width:560px) {
+          .cal-wrap, .cal-fullscreen .cal-wrap { padding:12px; }
+          .cal-navigation { width:100%; } .cal-heading { flex:1; min-width:120px; }
+          .cal-actions { justify-content:space-between; width:100%; }
+          .cal-title { font-size:16px; } .cal-summary { gap:6px; }
+          .cal-summary-item { padding:9px; } .cal-summary-number { font-size:20px; }
+          .cal-summary-label { font-size:9px; } .cal-filter-search { max-width:none; }
+          .cal-filter-note { margin-left:0; }
+          .cal-grid { gap:3px; } .cal-cell { min-height:84px; padding:4px; }
+          .cal-day-active { display:none; } .cal-chip { font-size:9px; padding:3px; }
+          .cal-pill { padding:5px 9px; } .cal-legend-note { width:100%; margin-left:0; } }
+        @media print { .cal-shell.cal-fullscreen { position:static; overflow:visible; }
+          .cal-btn, .cal-toggle, .cal-filters { display:none; }
+          .cal-year-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+          .cal-year-month, .cal-summary-item { break-inside:avoid; } }
       `}</style>
 
       <div className="cal-wrap">
-        {/* Toolbar */}
         <div className="cal-toolbar">
-          <button className="cal-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
-          <button className="cal-btn" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
-          <div className="cal-title">{MONTH_FULL[viewDate.getMonth()]} {viewDate.getFullYear()}</div>
-          <button className="cal-btn" onClick={goToday}>Today</button>
-          <span className="hint" style={{ marginLeft: 'auto' }}>
-            {monthAudits.length} audit{monthAudits.length === 1 ? '' : 's'} this month
-          </span>
-        </div>
-
-        {/* Fiscal-year month pills */}
-        <div className="cal-pills">
-          {fyMonths.map(({ month, year }) => {
-            const active = viewDate.getMonth() === month && viewDate.getFullYear() === year
-            return (
-              <button
-                key={`${year}-${month}`}
-                className={`cal-pill ${active ? 'active' : ''}`}
-                onClick={() => jumpTo(month, year)}
-              >
-                {MONTH_FULL[month].slice(0, 3)}
+          <div className="cal-navigation">
+            <button type="button" className="cal-btn cal-btn-arrow"
+              onClick={() => mode === 'year' ? shiftYear(-1) : shiftMonth(-1)}
+              aria-label={mode === 'year' ? 'Previous financial year' : 'Previous month'}>‹</button>
+            <button type="button" className="cal-btn cal-btn-arrow"
+              onClick={() => mode === 'year' ? shiftYear(1) : shiftMonth(1)}
+              aria-label={mode === 'year' ? 'Next financial year' : 'Next month'}>›</button>
+            <div className="cal-heading">
+              <div className="cal-title">
+                {mode === 'year'
+                  ? `FY ${viewFyStart}–${String((viewFyStart + 1) % 100).padStart(2, '0')}`
+                  : `${MONTH_FULL[viewDate.getMonth()]} ${viewDate.getFullYear()}`}
+              </div>
+              <div className="cal-subtitle">
+                {mode === 'year' ? 'Annual audit schedule · April to March' : `${monthAudits.length} audits active this month`}
+              </div>
+            </div>
+            <button type="button" className="cal-btn" onClick={mode === 'year' ? goThisFy : goToday}>
+              {mode === 'year' ? 'This FY' : 'Today'}
+            </button>
+          </div>
+          <div className="cal-actions">
+            <div className="cal-toggle" role="group" aria-label="Calendar view">
+              <button type="button" className={mode === 'month' ? 'active' : ''}
+                onClick={() => switchMode('month')} aria-pressed={mode === 'month'}>Month</button>
+              <button type="button" className={mode === 'year' ? 'active' : ''}
+                onClick={() => switchMode('year')} aria-pressed={mode === 'year'}>Year</button>
+            </div>
+            {mode === 'year' && (
+              <button type="button" className="cal-btn" onClick={() => setFullscreen((value) => !value)}
+                title={fullscreen ? 'Return to the page' : 'Use entire screen'}>
+                {fullscreen ? 'Exit full screen' : 'Full screen'}
               </button>
-            )
-          })}
+            )}
+          </div>
         </div>
 
-        {/* Grid */}
-        <div className="cal-grid">
-          {WEEKDAYS.map((w) => <div key={w} className="cal-wd">{w}</div>)}
+        <div className="cal-filters">
+          <input className="cal-filter-search" aria-label="Search calendar audits" value={search}
+            onChange={(e) => setSearch(e.target.value)} placeholder="Search audits or departments…" />
+          <select className="cal-filter-select" aria-label="Filter audit type" value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="all">All audit types</option>
+            {TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <select className="cal-filter-select" aria-label="Filter audit status" value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All statuses</option>
+            {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          <span className="cal-filter-note">{filteredAudits.length} matching audits</span>
+        </div>
 
-          {grid.map(({ date, outside }, i) => {
-            const dayAudits = outside ? [] : auditsOn(date)
-            const isToday = sameDay(date, today)
-            return (
-              <div key={i} className={`cal-cell ${outside ? 'outside' : ''} ${isToday ? 'today' : ''}`}>
-                <div className="cal-num">{date.getDate()}</div>
-                <div className="cal-events">
-                  {dayAudits.slice(0, 3).map((a) => {
-                    const isStart = sameDay(date, a._start)
+        {mode === 'year' ? (
+          <>
+            <div className="cal-summary">
+              <div className="cal-summary-item">
+                <div className="cal-summary-label">Audits in this FY</div>
+                <div className="cal-summary-number">{fyAudits.length}</div>
+              </div>
+              <div className="cal-summary-item">
+                <div className="cal-summary-label">Starting this FY</div>
+                <div className="cal-summary-number">{fyStarting}</div>
+              </div>
+              <div className="cal-summary-item">
+                <div className="cal-summary-label">Departments covered</div>
+                <div className="cal-summary-number">{departmentsCovered}</div>
+              </div>
+            </div>
+
+            <div className="cal-year-grid">
+              {yearData.map(({ month, year, items, startingCount }) => {
+                const isCurrent = year === today.getFullYear() && month === today.getMonth()
+                const monthStart = new Date(year, month, 1)
+                return (
+                  <section key={`${year}-${month}`} className={`cal-year-month ${isCurrent ? 'current' : ''}`}>
+                    <button type="button" className="cal-year-head" onClick={() => openMonth(month, year)}
+                      title={`Open ${MONTH_FULL[month]} ${year}`}>
+                      <span className="cal-year-name">
+                        {MONTH_FULL[month]} <span className="cal-year-head-year">{year}</span>
+                      </span>
+                      <span className="cal-year-count">
+                        <span className="cal-year-count-number">{items.length} audit{items.length === 1 ? '' : 's'}</span>
+                        <span className="cal-year-chevron" aria-hidden="true">›</span>
+                      </span>
+                    </button>
+                    <div className="cal-year-subhead">
+                      {items.length ? `${startingCount} starting · ${items.length - startingCount} continuing` : 'No scheduled work'}
+                    </div>
+                    <div className="cal-year-list">
+                      {items.length === 0 ? (
+                        <div className="cal-year-empty">No audits scheduled this month</div>
+                      ) : items.map((audit) => {
+                        const continuing = audit._start < monthStart
+                        return (
+                          <button type="button" key={audit.id} className="cal-year-item"
+                            onClick={() => navigate(`/audit/${audit.id}`)}
+                            title={`${audit.code} — ${audit.title}\n${fmtDate(audit.startDate)} → ${fmtDate(audit.endDate)}`}>
+                            <span className="cal-year-date" style={{ borderTopColor: audit._color }}>
+                              {continuing ? (
+                                <span className="cal-year-date-cont">Ongoing</span>
+                              ) : (
+                                <>
+                                  <span className="cal-year-date-day">{String(audit._start.getDate()).padStart(2, '0')}</span>
+                                  <span className="cal-year-date-month">{MONTH_FULL[month].slice(0, 3)}</span>
+                                </>
+                              )}
+                            </span>
+                            <span className="cal-year-details">
+                              <span className="cal-year-row">
+                                <span className="cal-dot" style={{ background: audit._color }} />
+                                <span className="cal-year-code" style={{ color: audit._color }}>{audit.code}</span>
+                                <span className="cal-year-status">{audit.status}</span>
+                              </span>
+                              <span className="cal-year-title">{audit.title}</span>
+                              <span className="cal-year-meta">{audit.departmentName || audit.type}</span>
+                              <span className="cal-year-meta">{fmtDate(audit.startDate)} → {fmtDate(audit.endDate)}</span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )
+              })}            </div>
+          </>
+        ) : (
+          <>
+            <div className="cal-pills">
+              {yearMonths.map(({ month, year }) => (
+                <button type="button" key={`${year}-${month}`}
+                  className={`cal-pill ${viewDate.getMonth() === month && viewDate.getFullYear() === year ? 'active' : ''}`}
+                  onClick={() => jumpTo(month, year)}>{MONTH_FULL[month].slice(0, 3)}</button>
+              ))}
+            </div>
+            <div className="cal-month-layout">
+              <div className="cal-month-board">
+                <div className="cal-grid">
+                  {WEEKDAYS.map((day) => <div className="cal-wd" key={day}>{day}</div>)}
+                  {monthCells.map(({ date, outside }, index) => {
+                    const starts = outside ? [] : monthAudits.filter((a) => sameDay(a._start, date))
+                    const active = outside ? [] : monthAudits.filter((a) => inAuditWindow(a, date))
                     return (
-                      <div
-                        key={a.id}
-                        className="cal-chip"
-                        style={{
-                          background: `${a._color}1a`,
-                          borderLeft: `3px solid ${a._color}`,
-                          color: a._color,
-                        }}
-                        onClick={() => navigate(`/audit/${a.id}`)}
-                        title={`${a.code} — ${a.title}\n${fmtDate(a.startDate)} → ${fmtDate(a.endDate)}`}
-                      >
-                        {isStart ? a.code : ''}
+                      <div key={index} className={`cal-cell ${outside ? 'outside' : ''} ${sameDay(date, today) ? 'today' : ''} ${sameDay(date, selectedDate) && !outside ? 'selected' : ''}`}>
+                        <button type="button" className="cal-day-button" disabled={outside}
+                          onClick={() => setSelectedDate(date)} aria-label={`Select ${dateLabel(date)}`}>
+                          {date.getDate()}
+                          {active.length > 0 && <span className="cal-day-active">{active.length} active</span>}
+                        </button>
+                        <div className="cal-events">
+                          {starts.slice(0, 3).map((audit) => (
+                            <button type="button" key={audit.id} className="cal-chip"
+                              style={{ background: `${audit._color}16`, borderLeftColor: audit._color, color: audit._color }}
+                              title={`${audit.code} — ${audit.title}\n${fmtDate(audit.startDate)} → ${fmtDate(audit.endDate)}`}
+                              onClick={() => navigate(`/audit/${audit.id}`)}>{audit.code}</button>
+                          ))}
+                          {starts.length > 3 && <span className="cal-more">+{starts.length - 3} more</span>}
+                        </div>
                       </div>
                     )
                   })}
-                  {dayAudits.length > 3 && (
-                    <div className="cal-more">+{dayAudits.length - 3} more</div>
-                  )}
                 </div>
               </div>
-            )
-          })}
-        </div>
+              <aside className="cal-agenda">
+                <div className="cal-agenda-head">
+                  <div className="cal-title" style={{ fontSize: 14 }}>Day details</div>
+                  <div className="cal-agenda-date">{dateLabel(selectedDate)}</div>
+                  <div className="cal-subtitle">{selectedAudits.length} active audit{selectedAudits.length === 1 ? '' : 's'}</div>
+                </div>
+                <div className="cal-agenda-body">
+                  {selectedAudits.length === 0 ? (
+                    <div className="cal-empty">No audits scheduled for this date.</div>
+                  ) : selectedAudits.map((audit) => (
+                    <button type="button" key={audit.id} className="cal-agenda-item"
+                      style={{ borderLeftColor: audit._color }} onClick={() => navigate(`/audit/${audit.id}`)}>
+                      <div className="cal-agenda-code" style={{ color: audit._color }}>{audit.code}</div>
+                      <div className="cal-agenda-title">{audit.title}</div>
+                      <div className="cal-agenda-meta">{audit.departmentName || audit.type} · {audit.status}</div>
+                      <div className="cal-agenda-meta">{fmtDate(audit.startDate)} → {fmtDate(audit.endDate)}</div>
+                    </button>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          </>
+        )}
 
-        {/* Legend */}
         <div className="cal-legend">
           {Object.entries(CAL_TYPE_COLOR).map(([type, color]) => (
-            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="cal-dot" style={{ background: color }} />
-              {type}
-            </div>
+            <span className="cal-legend-item" key={type}>
+              <span className="cal-dot" style={{ background: color }} />{type}
+            </span>
           ))}
+          {mode === 'year' && <span className="cal-legend-note">Audits appear in date order · Click a month or an audit to open it</span>}
         </div>
       </div>
     </div>
