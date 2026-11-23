@@ -45,7 +45,7 @@ const ROUTES = [
   { path: '/audits', module: 'audits', render: () => <Audits /> },
   { path: '/audit/:id', module: 'audits', render: (p) => <AuditDetail id={p.id} /> },
   { path: '/findings', module: 'findings', render: () => <Findings /> },
-  { path: '/compliance', module: 'compliance', render: () => <Compliance /> },
+  { path: '/compliance', render: () => <Compliance /> },
   { path: '/analytics', module: 'analytics', render: () => <Analytics /> },
   { path: '/reports', module: 'reports', render: () => <Reports /> },
   { path: '/documents', module: 'documents', render: () => <Documents /> },
@@ -123,7 +123,9 @@ function Router() {
     )
   }
 
-  if (!canModule(currentUser, matched.module)) {
+  // Routes without a module (e.g. /compliance, which restricts its own content
+  // by role) are open to every signed-in user.
+  if (matched.module && !canModule(currentUser, matched.module)) {
     return (
       <AppLayout>
         <Empty icon="⛨" title="Access denied" sub={`The ${ROLES[currentUser.role] ? ROLES[currentUser.role].label : currentUser.role} role does not have access to this module.`}>

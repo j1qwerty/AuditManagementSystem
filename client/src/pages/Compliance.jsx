@@ -13,6 +13,7 @@ import {
 import { CommsActionModal, CommsLogTable, CommsHistory } from '../components/comms'
 import { fmtDate, fmtDateTime, daysFromNow } from '../lib/utils'
 import { dispatchComms, visibleCommsLogs } from '../lib/comms'
+import { canModule } from '../lib/permissions'
 
 export default function Compliance() {
   const { data, save, notify, sendEmail, currentUser, can, toast } = useData()
@@ -27,19 +28,24 @@ export default function Compliance() {
   const [altDept, setAltDept] = useState('')
   const [resolveNote, setResolveNote] = useState('')
 
+  // Roles without the compliance module may still open this page, but only to
+  // read the communication log entries that concern them.
+  const hasCompliance = canModule(currentUser, 'compliance')
+  const activeTab = hasCompliance ? tab : 'log'
+
   const deptName = (id) => (data.departments.find((d) => d.id === id) || {}).name || '—'
   const caoIds = data.users.filter((u) => u.role === 'cao').map((u) => u.id)
   const directorIds = data.users.filter((u) => u.role === 'director').map((u) => u.id)
 
   const rows = useMemo(() => {
     let list = data.observations
-    if (tab === 'open') list = list.filter((o) => !['Resolved'].includes(o.status))
-    if (tab === 'escalated') list = list.filter((o) => o.status === 'Escalated')
-    if (tab === 'resolved') list = list.filter((o) => o.status === 'Resolved')
+    if (activeTab === 'open') list = list.filter((o) => !['Resolved'].includes(o.status))
+    if (activeTab === 'escalated') list = list.filter((o) => o.status === 'Escalated')
+    if (activeTab === 'resolved') list = list.filter((o) => o.status === 'Resolved')
     return list
       .filter((o) => deptF === 'all' || o.departmentId === deptF)
       .filter((o) => statusF === 'all' || o.complianceStatus === statusF)
-  }, [data.observations, tab, deptF, statusF])
+  }, [data.observations, activeTab, deptF, statusF])
 
   const stats = useMemo(() => {
     const total = data.observations.length
@@ -49,9 +55,10 @@ export default function Compliance() {
     return { total, resolved, overdue, escalated, rate: total ? Math.round((resolved / total) * 100) : 0 }
   }, [data.observations])
 
-  // communication log - visibility is role/ team based
+  // communication log - every reminder / escalation the user may see (not just
+  // observations), so manual reminders sent from findings or audits appear here
   const myLogs = useMemo(
-    () => visibleCommsLogs(currentUser, data.commsLogs, data.audits).filter((l) => l.contextType === 'Observation'),
+    () => visibleCommsLogs(currentUser, data.commsLogs, data.audits),
     [currentUser, data.commsLogs, data.audits]
   )
 
@@ -121,13 +128,15 @@ export default function Compliance() {
     toast('Observation resolved')
   }
 
-  const tabs = [
-    { key: 'open', label: 'Open', count: data.observations.filter((o) => o.status !== 'Resolved').length },
-    { key: 'escalated', label: 'Escalated', count: stats.escalated },
-    { key: 'resolved', label: 'Resolved', count: stats.resolved },
-    { key: 'all', label: 'All', count: stats.total },
-    { key: 'log', label: 'Communication Log', count: myLogs.length }
-  ]
+  const tabs = hasCompliance
+    ? [
+        { key: 'open', label: 'Open', count: data.observations.filter((o) => o.status !== 'Resolved').length },
+        { key: 'escalated', label: 'Escalated', count: stats.escalated },
+        { key: 'resolved', label: 'Resolved', count: stats.resolved },
+        { key: 'all', label: 'All', count: stats.total },
+        { key: 'log', label: 'Communication Log', count: myLogs.length }
+      ]
+    : [{ key: 'log', label: 'Communication Log', count: myLogs.length }]
 
   const obsLogs = (o) => data.commsLogs.filter((l) => l.contextType === 'Observation' && l.contextId === o.id)
 
@@ -135,31 +144,35 @@ export default function Compliance() {
     <div>
       <PageHead
         title="Compliance Tracking"
-        sub="Time-bound follow-up on audit observations — reminders, escalation and resolution with recorded remarks"
+        sub={hasCompliance
+          ? 'Time-bound follow-up on audit observations — reminders, escalation and resolution with recorded remarks'
+          : 'Reminders and escalations that concern you or your audits'}
         actions={<PrintButton label="Print" title="Print this view (or save as PDF)" />}
       />
 
-      <div className="grid grid-5 mb-3">
-        <StatCard label="Total Observations" value={stats.total} strip="#8b53ac" onClick={() => setTab('all')} foot="raised across all audits" />
-        <StatCard label="Open" value={stats.total - stats.resolved} strip="#d97706" onClick={() => setTab('open')} foot="awaiting compliance" />
-        <StatCard label="Overdue" value={stats.overdue} strip="#e0364f" onClick={() => setTab('open')} foot="past due date" />
-        <StatCard label="Escalated" value={stats.escalated} strip="#cc004e" onClick={() => setTab('escalated')} foot="at department / board level" />
-        <StatCard label="Compliance Rate" value={`${stats.rate}%`} strip="#0f9d6e" foot={`${stats.resolved} resolved`} />
-      </div>
+      {hasCompliance && (
+        <div className="grid grid-5 mb-3">
+          <StatCard label="Total Observations" value={stats.total} strip="#8b53ac" onClick={() => setTab('all')} foot="raised across all audits" />
+          <StatCard label="Open" value={stats.total - stats.resolved} strip="#d97706" onClick={() => setTab('open')} foot="awaiting compliance" />
+          <StatCard label="Overdue" value={stats.overdue} strip="#e0364f" onClick={() => setTab('open')} foot="past due date" />
+          <StatCard label="Escalated" value={stats.escalated} strip="#cc004e" onClick={() => setTab('escalated')} foot="at department / board level" />
+          <StatCard label="Compliance Rate" value={`${stats.rate}%`} strip="#0f9d6e" foot={`${stats.resolved} resolved`} />
+        </div>
+      )}
 
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <Tabs tabs={tabs} active={activeTab} onChange={setTab} />
 
-      {tab === 'log' ? (
+      {activeTab === 'log' ? (
         <CommsLogTable
           logs={myLogs}
           users={data.users}
           audits={data.audits}
           csvName="compliance-communication-log"
-          emptySub="Reminders and escalations on observations that concern you or your audits appear here."
-          onRowClick={(l) => {
+          emptySub="Reminders and escalations that concern you or your audits appear here."
+          onRowClick={hasCompliance ? (l) => {
             const o = data.observations.find((x) => x.id === l.contextId)
             if (o) setView(o)
-          }}
+          } : undefined}
         />
       ) : (
         <DataTable

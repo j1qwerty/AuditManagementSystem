@@ -165,7 +165,7 @@ export function AppLayout({ children }) {
                 {g.group && <div className="nav-group-label">{g.group}</div>}
                 {items.map((it) => {
                   const isActive = activeModule === it.to || (it.to === '/audits' && path.startsWith('/audit/')) || (it.to === '/departments' && path.startsWith('/department/'))
-                  const count = it.key === 'audits' ? counts.activeAudits : it.key === 'findings' ? counts.openFindings : it.key === 'compliance' ? counts.overdue : it.key === 'messages' ? counts.unreadMsg : null
+                  const count = it.key === 'audits' ? counts.activeAudits : it.key === 'findings' ? counts.openFindings : it.key === 'compliance' ? (canModule(currentUser, 'compliance') ? counts.overdue : null) : it.key === 'messages' ? counts.unreadMsg : null
                   const Icon = it.Icon
                   return (
                     <Link key={it.key} to={it.to} className={`nav-item ${isActive ? 'active' : ''}`}>
