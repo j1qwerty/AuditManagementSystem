@@ -1,7 +1,7 @@
 // App shell: sidebar (role-filtered navigation), topbar with global search,
 // notifications (color-coded, click-through) and user menu.
 import { useMemo, useState, useCallback } from 'react'
-import { Link, navigate, useRoute } from '../lib/router'
+import { Link, navigate, useRoute, useNavHistory, goBack, routeTitle } from '../lib/router'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { canModule, ROLES } from '../lib/permissions'
@@ -26,6 +26,7 @@ import { BellIcon } from '@solar-icons/react/linear/bell'
 import { ChatRoundIcon } from '@solar-icons/react/linear/chat-round'
 import { UserCircleIcon } from '@solar-icons/react/linear/user-circle'
 import { LogoutIcon } from '@solar-icons/react/linear/logout'
+import { ArrowLeftIcon } from '@solar-icons/react/linear/arrow-left'
 
 const NAV = [
   { group: null, items: [{ key: 'dashboard', label: 'Dashboard', Icon: Widget5Icon, to: '/dashboard' }] },
@@ -90,6 +91,7 @@ export function AppLayout({ children }) {
   const notifRef = useClickOutside(() => setNotifOpen(false))
   const userRef = useClickOutside(() => setUserMenuOpen(false))
   const searchRef = useClickOutside(() => setSearchFocus(false))
+  const { canBack, target } = useNavHistory()
 
   const activeModule = useMemo(() => '/' + path.split('/')[1], [path])
 
@@ -186,6 +188,15 @@ export function AppLayout({ children }) {
 
       <div className="main-area">
         <header className="topbar">
+          <button
+            className="topbar-icon-btn back-nav"
+            disabled={!canBack}
+            onClick={goBack}
+            title={canBack ? `Back to ${routeTitle(target)}` : 'No previous page yet'}
+            aria-label="Go back"
+          >
+            <ArrowLeftIcon size={18} />
+          </button>
           <span className="crumb">{crumb}</span>
           <div className="topbar-spacer" />
 

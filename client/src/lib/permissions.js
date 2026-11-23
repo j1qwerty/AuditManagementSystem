@@ -45,6 +45,10 @@ export const ROLES = {
 
 export const ROLE_ORDER = ['admin', 'director', 'cao', 'senior', 'junior', 'coordinator']
 
+// Hierarchy levels for reminder / escalation targeting (1 = highest).
+// Used to offer role-based recipient groups: above / same level / below.
+export const ROLE_LEVEL = { admin: 1, director: 2, cao: 3, senior: 4, junior: 5, coordinator: 5 }
+
 // Modules each role can open (sidebar is filtered by this map).
 export const MODULES = {
   dashboard: ['admin', 'director', 'cao', 'senior', 'junior', 'coordinator'],
@@ -130,4 +134,15 @@ export function canDefault(user, action) {
 
 export function roleLabel(key) {
   return ROLES[key] ? ROLES[key].label : key
+}
+
+// Relation of one role to another ('above' | 'same' | 'below') from the
+// perspective of `myRole`.
+export function roleRelation(myRole, otherRole) {
+  const a = ROLE_LEVEL[myRole]
+  const b = ROLE_LEVEL[otherRole]
+  if (a === undefined || b === undefined) return 'below'
+  if (b < a) return 'above'
+  if (b === a) return 'same'
+  return 'below'
 }

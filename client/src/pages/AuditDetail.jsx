@@ -7,18 +7,22 @@ import { useData } from '../context/DataContext'
 import { navigate } from '../lib/router'
 import {
   Badge, DataTable, PageHead, Progress, TypeBadge, SeverityBadge, Modal, ConfirmDialog,
-  Empty, KV, Tabs, Avatar, FilePreviewModal, InfoTip, EscalationBadge, SectionTitle, UserPicker
+  Empty, KV, Tabs, Avatar, FilePreviewModal, EscalationBadge, SectionTitle, UserPicker
 } from '../components/ui'
 import { fmtDate, fmtDateTime, fmtRelative, fmtBytes, fmtINR, daysFromNow, uid, fileKind } from '../lib/utils'
 import { suggestedProgress } from '../lib/ai'
+import { dispatchComms } from '../lib/comms'
+import { CommsActionModal, CommsHistory } from '../components/comms'
 import config from '../lib/config'
 
-const ESCALATION_LEVELS = [
-  { level: 1, label: 'Level 1 — Department Director', desc: 'Escalate to the director of the concerned department' },
-  { level: 2, label: 'Level 2 — Head of Department', desc: 'Escalate to the administrative head of the department' },
-  { level: 3, label: 'Level 3 — Audit Director', desc: 'Bring to the Audit Director for intervention' },
-  { level: 4, label: 'Level 4 — Executive Board', desc: 'Highest level - place before the executive board' }
-]
+// Escalation levels and default recipient groups per level are shared with
+// the CommsActionModal (components/comms.jsx).
+export const REVIEW_LEVEL_DEFAULTS = {
+  1: ['coord', 'role:cao'],
+  2: ['coord', 'role:cao'],
+  3: ['role:director', 'role:cao'],
+  4: ['role:director', 'role:admin', 'role:cao']
+}
 
 export default function AuditDetail({ id }) {
   const { data, save, remove, saveFile, logActivity, notify, can, currentUser, sendEmail, toast } = useData()
@@ -123,6 +127,7 @@ export default function AuditDetail({ id }) {
           canUpdate={can('observation.update')} canResolve={can('observation.resolve')} canEscalate={can('observation.escalate')}
           canRemind={can('reminders.send')} save={save} notify={notify} sendEmail={sendEmail} currentUser={currentUser}
           coordinatorId={coordinatorId} caoIds={caoIds} directorIds={directorIds} toast={toast} logActivity={logActivity}
+          commsLogs={data.commsLogs}
         />
       )}
       {tab === 'workpapers' && (
@@ -134,8 +139,9 @@ export default function AuditDetail({ id }) {
       {tab === 'review' && (
         <ReviewTab
           audit={audit} canSubmit={can('audit.submitReview')} canApprove={can('audit.approve')}
-          canFinalise={can('audit.finalise')} mutate={mutate} currentUser={currentUser}
+          canFinalise={can('audit.finalise')} canRemind={can('reminders.send')} mutate={mutate} currentUser={currentUser}
           directorIds={directorIds} caoIds={caoIds} notify={notify} toast={toast}
+          users={data.users} save={save} sendEmail={sendEmail} coordinatorId={coordinatorId}
         />
       )}
       {tab === 'discussion' && (
@@ -969,12 +975,14 @@ function FindingModal({ open, onClose, onSave, audit, initial }) {
 /* ======================================================================== */
 /* Observations                                                              */
 /* ======================================================================== */
-function ObservationsTab({ audit, observations, findings, data, canUpdate, canResolve, canEscalate, canRemind, save, notify, sendEmail, currentUser, coordinatorId, caoIds, directorIds, toast, logActivity }) {
+function ObservationsTab({ audit, observations, findings, data, canUpdate, canResolve, canEscalate, canRemind, save, notify, sendEmail, currentUser, coordinatorId, caoIds, directorIds, toast, logActivity, commsLogs }) {
   const [showAdd, setShowAdd] = useState(false)
   const [viewO, setViewO] = useState(null)
+  const [remindO, setRemindO] = useState(null)
   const [escalateO, setEscalateO] = useState(null)
   const [resolveO, setResolveO] = useState(null)
-  const [esc, setEsc] = useState({ level: 1, remarks: '', altDept: '' })
+  const [escLevel, setEscLevel] = useState(1)
+  const [altDept, setAltDept] = useState('')
 
   const createObs = async (o) => {
     const rec = {
@@ -990,27 +998,57 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
     toast('Observation raised')
   }
 
-  const doEscalate = async () => {
-    const level = ESCALATION_LEVELS.find((l) => l.level === Number(esc.level))
+  // ---- manual reminder: remark + selected recipients, fully logged ----
+  const sendReminder = async ({ recipients, remark }) => {
+    const o = remindO
+    const names = recipients.map((r) => r.name).join(', ')
     const upd = {
-      ...escalateO,
+      ...o, remindersSent: (o.remindersSent || 0) + 1, lastRemindedAt: new Date().toISOString(),
+      history: [...(o.history || []), { date: new Date().toISOString(), event: `Reminder #${(o.remindersSent || 0) + 1} sent by ${currentUser.name} to ${names} — remarks: ${remark}` }]
+    }
+    await save('observations', upd, { logAction: 'Sent reminder', logDetail: `${audit.code} — ${o.title} → ${names}`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Reminder', mode: 'Manual', contextType: 'Observation', contextId: o.id,
+        auditId: audit.id, title: o.title, recipients, remark,
+        link: `#/audit/${audit.id}`,
+        notifyTitle: `Reminder: ${o.title}`,
+        notifyBody: `${audit.code} · Response due ${fmtDate(o.dueDate)} — reminder from ${currentUser.name}.`
+      }
+    )
+    setRemindO(null); setViewO(upd)
+    toast(`Reminder sent to ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'} and recorded in the log`)
+  }
+
+  // ---- manual escalation: level + remark + selected recipients ----
+  const doEscalate = async ({ recipients, remark, level, altDept: ad }) => {
+    const o = escalateO
+    const lvl = level || escLevel
+    const levelLabel = ['', 'Department Director', 'Head of Department', 'Audit Director', 'Executive Board'][lvl] || `Level ${lvl}`
+    const names = recipients.map((r) => r.name).join(', ')
+    const upd = {
+      ...o,
       status: 'Escalated',
-      escalationLevel: Number(esc.level),
-      escalatedTo: level ? level.label.replace(/^Level \d+ — /, '') : 'Level ' + esc.level,
+      escalationLevel: lvl,
+      escalatedTo: levelLabel,
       escalatedAt: new Date().toISOString(),
-      escalationRemarks: esc.remarks,
-      history: [...(escalateO.history || []), { date: new Date().toISOString(), event: `Escalated to ${level ? level.label : ''}${esc.altDept ? ` (parallel notice to ${esc.altDept})` : ''} by ${currentUser.name} — remarks: ${esc.remarks}` }]
+      escalationRemarks: remark,
+      history: [...(o.history || []), { date: new Date().toISOString(), event: `Escalated to Level ${lvl} (${levelLabel})${ad ? ` (parallel notice to ${ad})` : ''} by ${currentUser.name} — remarks: ${remark}` }]
     }
-    await save('observations', upd, { logAction: 'Escalated observation', logDetail: `${upd.title} → ${level ? level.label : ''}`, logRemarks: esc.remarks })
-    const targets = [...caoIds, ...directorIds]
-    if (coordinatorId) targets.push(coordinatorId)
-    await notify(Array.from(new Set(targets)), 'Escalation', `Observation escalated — ${upd.title}`, `${level ? level.label : ''}${esc.altDept ? ` · parallel notice: ${esc.altDept}` : ''}`, '#/compliance', esc.remarks)
-    if (coordinatorId) {
-      const coord = data.users.find((u) => u.id === coordinatorId)
-      if (coord) await sendEmail(coord.email, `Escalation: ${upd.title}`, `The observation has been escalated. Remarks: ${esc.remarks}`)
-    }
-    setEscalateO(null); setEsc({ level: 1, remarks: '', altDept: '' })
-    toast('Escalation recorded and stakeholders notified')
+    await save('observations', upd, { logAction: 'Escalated observation', logDetail: `${audit.code} — ${upd.title} → Level ${lvl} (${levelLabel})`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Escalation', mode: 'Manual', contextType: 'Observation', contextId: o.id,
+        auditId: audit.id, title: o.title, recipients, remark, level: lvl, escalatedTo: levelLabel,
+        link: `#/audit/${audit.id}`,
+        notifyTitle: `Escalated to Level ${lvl}: ${o.title}`,
+        notifyBody: `${audit.code} · ${levelLabel}${ad ? ` · parallel notice: ${ad}` : ''} — by ${currentUser.name}.`
+      }
+    )
+    setEscalateO(null); setViewO(upd); setAltDept('')
+    toast('Escalation recorded, stakeholders notified and logged')
   }
 
   const doResolve = async (note) => {
@@ -1025,16 +1063,7 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
     toast('Observation resolved')
   }
 
-  const sendReminder = async (o) => {
-    const upd = { ...o, remindersSent: (o.remindersSent || 0) + 1, history: [...(o.history || []), { date: new Date().toISOString(), event: `Reminder #${(o.remindersSent || 0) + 1} sent by ${currentUser.name}` }] }
-    await save('observations', upd, { logAction: 'Sent reminder', logDetail: `${o.title}` })
-    if (coordinatorId) {
-      const coord = data.users.find((u) => u.id === coordinatorId)
-      await notify([coordinatorId], 'Compliance', `Reminder: response pending — ${o.title}`, `Due date ${fmtDate(o.dueDate)}. Please submit the compliance position.`, '#/compliance')
-      if (coord) await sendEmail(coord.email, `Reminder: ${o.title}`, `Response is due on ${fmtDate(o.dueDate)}.`)
-    }
-    toast('Reminder sent to the department coordinator')
-  }
+  const obsLogs = (o) => (commsLogs || []).filter((l) => l.contextType === 'Observation' && l.contextId === o.id)
 
   return (
     <div>
@@ -1067,8 +1096,8 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
             key: '__actions', label: '', render: (o) => (
               <div className="row-actions">
                 <button className="btn-icon" title="View details" onClick={() => setViewO(o)}>👁</button>
-                {canRemind && o.status !== 'Resolved' && <button className="btn-icon" title="Send reminder" onClick={() => sendReminder(o)}>🔔</button>}
-                {canEscalate && o.status !== 'Resolved' && <button className="btn-icon danger" title="Escalate" onClick={() => { setEscalateO(o); setEsc({ level: Math.min(4, (o.escalationLevel || 0) + 1), remarks: '', altDept: '' }) }}>↑</button>}
+                {canRemind && o.status !== 'Resolved' && <button className="btn-icon" title="Send reminder (with remark & recipients)" onClick={() => setRemindO(o)}>🔔</button>}
+                {canEscalate && o.status !== 'Resolved' && <button className="btn-icon danger" title="Escalate" onClick={() => { setEscalateO(o); setEscLevel(Math.min(4, (o.escalationLevel || 0) + 1)); setAltDept('') }}>↑</button>}
                 {canResolve && o.status !== 'Resolved' && <button className="btn-icon" title="Resolve" onClick={() => setResolveO(o)}>✓</button>}
               </div>
             )
@@ -1106,6 +1135,9 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
                 <span className="bold">Resolution: </span>{viewO.resolutionNote}
               </div>
             )}
+            <div className="mb-3">
+              <CommsHistory logs={obsLogs(viewO)} users={data.users} />
+            </div>
             <SectionTitle>Follow-up History</SectionTitle>
             <div className="timeline">
               {(viewO.history || []).map((h, i) => (
@@ -1116,6 +1148,13 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
                 </div>
               ))}
             </div>
+            <div className="flex mt-3" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {canRemind && viewO.status !== 'Resolved' && <button className="btn btn-secondary" onClick={() => setRemindO(viewO)}>🔔 Send Reminder</button>}
+              {canEscalate && viewO.status !== 'Resolved' && (
+                <button className="btn btn-danger" onClick={() => { setEscalateO(viewO); setEscLevel(Math.min(4, (viewO.escalationLevel || 0) + 1)); setAltDept('') }}>↑ Escalate</button>
+              )}
+              {canResolve && viewO.status !== 'Resolved' && <button className="btn btn-success" onClick={() => setResolveO(viewO)}>✓ Resolve</button>}
+            </div>
           </div>
         )}
       </Modal>
@@ -1123,44 +1162,36 @@ function ObservationsTab({ audit, observations, findings, data, canUpdate, canRe
       {/* add observation */}
       <ObsModal open={showAdd} onClose={() => setShowAdd(false)} onSave={createObs} findings={findings} />
 
-      {/* escalate */}
-      <Modal
-        open={!!escalateO} onClose={() => setEscalateO(null)} title="Escalate Observation" sub={escalateO ? escalateO.title : ''} size="md"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setEscalateO(null)}>Cancel</button>
-            <button className="btn btn-danger" disabled={!esc.remarks.trim()} onClick={doEscalate}>Escalate</button>
-          </>
-        }
-      >
-        <div className="flex-col" style={{ gap: 12 }}>
-          <div className="field">
-            <label>Escalation level <span className="req">*</span> <InfoTip text="Choose the authority who should intervene. You can escalate within the same level to another department, or go to a higher level." /></label>
-            <div className="flex-col" style={{ gap: 7 }}>
-              {ESCALATION_LEVELS.map((l) => (
-                <label key={l.level} className={`check-item ${Number(esc.level) === l.level ? 'picked' : ''}`} style={{ cursor: 'pointer', borderColor: Number(esc.level) === l.level ? 'var(--thistle-500)' : undefined }}>
-                  <input type="radio" name="esc-level" checked={Number(esc.level) === l.level} onChange={() => setEsc((e) => ({ ...e, level: l.level }))} style={{ accentColor: 'var(--thistle-500)' }} />
-                  <div>
-                    <div className="bold small">{l.label}</div>
-                    <div className="muted tiny">{l.desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <label>Parallel notice to another department (optional)</label>
-            <select className="select" value={esc.altDept} onChange={(e) => setEsc((x) => ({ ...x, altDept: e.target.value }))}>
-              <option value="">Not applicable</option>
-              {data.departments.filter((d) => d.id !== audit.departmentId).map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Remarks <span className="req">*</span></label>
-            <textarea className="textarea wide" value={esc.remarks} onChange={(e) => setEsc((x) => ({ ...x, remarks: e.target.value }))} placeholder="Why this is being escalated - included in the notification" />
-          </div>
-        </div>
-      </Modal>
+      {/* reminder modal — remark + role-based recipients */}
+      <CommsActionModal
+        open={!!remindO} onClose={() => setRemindO(null)}
+        kind="Reminder" onSend={sendReminder}
+        currentUser={currentUser} users={data.users}
+        audit={audit}
+        coordinatorId={coordinatorId || null}
+        contextTitle={remindO ? remindO.title : ''}
+        contextSub={remindO ? `${audit.code} · ${remindO.requirement}` : ''}
+        dueLabel={remindO ? fmtDate(remindO.dueDate) : ''}
+        initialGroups={['coord', 'team']}
+      />
+
+      {/* escalate modal — level + remark + recipients */}
+      <CommsActionModal
+        open={!!escalateO} onClose={() => setEscalateO(null)}
+        kind="Escalation" onSend={doEscalate}
+        currentUser={currentUser} users={data.users}
+        audit={audit}
+        coordinatorId={coordinatorId || null}
+        contextTitle={escalateO ? escalateO.title : ''}
+        contextSub={escalateO ? `${audit.code} · ${escalateO.requirement}` : ''}
+        dueLabel={escalateO ? fmtDate(escalateO.dueDate) : ''}
+        initialLevel={escLevel}
+        initialGroups={['coord', 'role:cao']}
+        levelDefaults={REVIEW_LEVEL_DEFAULTS}
+        altDeptOptions={data.departments.filter((d) => d.id !== audit.departmentId).map((d) => ({ id: d.id, name: d.name }))}
+        altDeptValue={altDept}
+        onAltDeptChange={setAltDept}
+      />
 
       {/* resolve */}
       <Modal
@@ -1383,9 +1414,32 @@ function WpModal({ open, onClose, onSave, initial, audit, currentUser }) {
 /* ======================================================================== */
 /* Review                                                                    */
 /* ======================================================================== */
-function ReviewTab({ audit, canSubmit, canApprove, canFinalise, mutate, currentUser, directorIds, caoIds, notify, toast }) {
+function ReviewTab({ audit, canSubmit, canApprove, canFinalise, canRemind, mutate, currentUser, directorIds, caoIds, notify, toast, users, save, sendEmail, coordinatorId }) {
   const [action, setAction] = useState(null) // {type, }
   const [remarks, setRemarks] = useState('')
+  const [remindOpen, setRemindOpen] = useState(false)
+
+  // ---- manual review reminder: remark + selected recipients, logged ----
+  const sendReviewReminder = async ({ recipients, remark }) => {
+    const names = recipients.map((r) => r.name).join(', ')
+    const updated = {
+      ...audit,
+      timeline: [...(audit.timeline || []), { date: new Date().toISOString(), by: currentUser.name, event: `Review reminder sent by ${currentUser.name} to ${names} — remarks: ${remark}` }]
+    }
+    await save('audits', updated, { logAction: 'Sent reminder', logDetail: `${audit.code} — review pending (${audit.status})`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Reminder', mode: 'Manual', contextType: 'Audit', contextId: audit.id,
+        auditId: audit.id, title: `${audit.code} — review reminder`, recipients, remark,
+        link: `#/audit/${audit.id}`,
+        notifyTitle: `Review reminder: ${audit.code}`,
+        notifyBody: `Audit is ${audit.status} — action requested by ${currentUser.name}.`
+      }
+    )
+    setRemindOpen(false)
+    toast(`Review reminder sent to ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}`)
+  }
 
   const doAction = async (type) => {
     if (type === 'submit') {
@@ -1484,7 +1538,19 @@ function ReviewTab({ audit, canSubmit, canApprove, canFinalise, mutate, currentU
                 {audit.status === 'Under Review' && canApprove && (
                   <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }}>Request Changes</button>
                 )}
+                {canRemind && (
+                  <button className="btn btn-secondary" onClick={() => setRemindOpen(true)}>🔔 Send Review Reminder</button>
+                )}
               </div>
+            </div>
+          </div>
+        )}
+        {canRemind && !na && (
+          <div className="card">
+            <div className="card-head"><h3>Follow-up</h3></div>
+            <div className="card-pad">
+              <p className="muted small" style={{ marginBottom: 12 }}>Nudge the people whose action is pending on this audit — with a remark, and recorded in the communication log.</p>
+              <button className="btn btn-secondary" onClick={() => setRemindOpen(true)}>🔔 Send Review Reminder</button>
             </div>
           </div>
         )}
@@ -1512,6 +1578,18 @@ function ReviewTab({ audit, canSubmit, canApprove, canFinalise, mutate, currentU
           <textarea className="textarea wide" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Recorded in the audit trail and sent with notifications" />
         </div>
       </Modal>
+
+      {/* review reminder — remark + role-based recipients */}
+      <CommsActionModal
+        open={remindOpen} onClose={() => setRemindOpen(false)}
+        kind="Reminder" onSend={sendReviewReminder}
+        currentUser={currentUser} users={users || []}
+        audit={audit}
+        coordinatorId={coordinatorId || null}
+        contextTitle={`${audit.code} · ${audit.title}`}
+        contextSub={`Status: ${audit.status} — pending action`}
+        initialGroups={audit.status === 'Completed' ? ['role:director'] : ['role:cao']}
+      />
     </div>
   )
 }

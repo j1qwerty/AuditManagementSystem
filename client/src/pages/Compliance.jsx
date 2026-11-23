@@ -1,20 +1,18 @@
 // Compliance Tracking - observation follow-up with reminders, escalations
-// (level selection) and resolution with remarks. All actions are notified.
+// (level selection) and resolution with remarks.
+// Reminders & escalations require a remark and let the sender pick recipients
+// (audit team, department coordinator, roles above / same level / below).
+// Every manual and automatic action is recorded in the communication log,
+// the observation history, the activity trail and notifications.
 import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
 import { navigate } from '../lib/router'
 import {
-  Badge, DataTable, PageHead, Modal, StatCard, Tabs, EscalationBadge, InfoTip, Progress, SectionTitle
+  Badge, DataTable, PageHead, Modal, StatCard, Tabs, EscalationBadge, SectionTitle
 } from '../components/ui'
+import { CommsActionModal, CommsLogTable, CommsHistory } from '../components/comms'
 import { fmtDate, fmtDateTime, daysFromNow } from '../lib/utils'
-import { projectCompliance } from '../lib/ai'
-
-const ESCALATION_LEVELS = [
-  { level: 1, label: 'Level 1 — Department Director', desc: 'Escalate to the director of the concerned department' },
-  { level: 2, label: 'Level 2 — Head of Department', desc: 'Escalate to the administrative head of the department' },
-  { level: 3, label: 'Level 3 — Audit Director', desc: 'Bring to the Audit Director for intervention' },
-  { level: 4, label: 'Level 4 — Executive Board', desc: 'Highest level - place before the executive board' }
-]
+import { dispatchComms, visibleCommsLogs } from '../lib/comms'
 
 export default function Compliance() {
   const { data, save, notify, sendEmail, currentUser, can, toast } = useData()
@@ -22,9 +20,11 @@ export default function Compliance() {
   const [deptF, setDeptF] = useState('all')
   const [statusF, setStatusF] = useState('all')
   const [view, setView] = useState(null)
+  const [remindO, setRemindO] = useState(null)   // observation being reminded
   const [escalateO, setEscalateO] = useState(null)
   const [resolveO, setResolveO] = useState(null)
-  const [esc, setEsc] = useState({ level: 1, remarks: '', altDept: '' })
+  const [escLevel, setEscLevel] = useState(1)
+  const [altDept, setAltDept] = useState('')
   const [resolveNote, setResolveNote] = useState('')
 
   const deptName = (id) => (data.departments.find((d) => d.id === id) || {}).name || '—'
@@ -49,51 +49,65 @@ export default function Compliance() {
     return { total, resolved, overdue, escalated, rate: total ? Math.round((resolved / total) * 100) : 0 }
   }, [data.observations])
 
-  // 6-month compliance trend + projection
-  const trend = useMemo(() => {
-    const months = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(); d.setMonth(d.getMonth() - i)
-      const key = d.toISOString().slice(0, 7)
-      const raised = data.observations.filter((o) => (o.history[0] || {}).date && o.history[0].date.slice(0, 7) === key).length
-      const resolved = data.observations.filter((o) => o.resolvedAt && o.resolvedAt.slice(0, 7) === key).length
-      months.push({ label: d.toLocaleString('en', { month: 'short' }), raised, resolved })
-    }
-    return months
-  }, [data.observations])
+  // communication log - visibility is role/ team based
+  const myLogs = useMemo(
+    () => visibleCommsLogs(currentUser, data.commsLogs, data.audits).filter((l) => l.contextType === 'Observation'),
+    [currentUser, data.commsLogs, data.audits]
+  )
 
+  const auditOf = (o) => data.audits.find((a) => a.id === o.auditId)
   const coordinatorFor = (o) => data.users.find((u) => u.role === 'coordinator' && u.departmentId === o.departmentId)
 
-  const sendReminder = async (o) => {
+  // ---- send manual reminder (remark + selected recipients, all logged) ----
+  const sendReminder = async ({ recipients, remark }) => {
+    const o = remindO
+    const audit = auditOf(o)
+    const names = recipients.map((r) => r.name).join(', ')
     const upd = {
-      ...o, remindersSent: (o.remindersSent || 0) + 1,
-      history: [...(o.history || []), { date: new Date().toISOString(), event: `Reminder #${(o.remindersSent || 0) + 1} sent by ${currentUser.name}` }]
+      ...o, remindersSent: (o.remindersSent || 0) + 1, lastRemindedAt: new Date().toISOString(),
+      history: [...(o.history || []), { date: new Date().toISOString(), event: `Reminder #${(o.remindersSent || 0) + 1} sent by ${currentUser.name} to ${names} — remarks: ${remark}` }]
     }
-    await save('observations', upd, { logAction: 'Sent reminder', logDetail: o.title })
-    const coord = coordinatorFor(o)
-    if (coord) {
-      await notify([coord.id], 'Compliance', `Reminder: response pending — ${o.title}`, `Due ${fmtDate(o.dueDate)}. Please submit the compliance position.`, '#/compliance')
-      await sendEmail(coord.email, `Reminder: ${o.title}`, `Response is due on ${fmtDate(o.dueDate)}.`)
-    }
-    setView({ ...upd })
-    toast('Reminder sent to the department coordinator')
+    await save('observations', upd, { logAction: 'Sent reminder', logDetail: `${o.title} → ${names}`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Reminder', mode: 'Manual', contextType: 'Observation', contextId: o.id,
+        auditId: o.auditId, title: o.title, recipients, remark,
+        link: audit ? `#/audit/${o.auditId}` : '#/compliance',
+        notifyTitle: `Reminder: ${o.title}`,
+        notifyBody: `${audit ? audit.code + ' · ' : ''}Response due ${fmtDate(o.dueDate)} — reminder from ${currentUser.name}.`
+      }
+    )
+    setRemindO(null); setView(upd)
+    toast(`Reminder sent to ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'} and recorded in the log`)
   }
 
-  const doEscalate = async () => {
-    const level = ESCALATION_LEVELS.find((l) => l.level === Number(esc.level))
+  // ---- manual escalation (level + remark + selected recipients) ----
+  const doEscalate = async ({ recipients, remark, level, altDept: ad }) => {
+    const o = escalateO
+    const audit = auditOf(o)
+    const lvl = level || escLevel
+    const levelLabel = ['', 'Department Director', 'Head of Department', 'Audit Director', 'Executive Board'][lvl] || `Level ${lvl}`
+    const names = recipients.map((r) => r.name).join(', ')
     const upd = {
-      ...escalateO, status: 'Escalated', escalationLevel: Number(esc.level),
-      escalatedTo: level ? level.label.replace(/^Level \d+ — /, '') : '',
-      escalatedAt: new Date().toISOString(), escalationRemarks: esc.remarks,
-      history: [...(escalateO.history || []), { date: new Date().toISOString(), event: `Escalated to ${level ? level.label : ''}${esc.altDept ? ` (parallel notice to ${esc.altDept})` : ''} by ${currentUser.name} — remarks: ${esc.remarks}` }]
+      ...o, status: 'Escalated', escalationLevel: lvl,
+      escalatedTo: levelLabel,
+      escalatedAt: new Date().toISOString(), escalationRemarks: remark,
+      history: [...(o.history || []), { date: new Date().toISOString(), event: `Escalated to Level ${lvl} (${levelLabel})${ad ? ` (parallel notice to ${ad})` : ''} by ${currentUser.name} — remarks: ${remark}` }]
     }
-    await save('observations', upd, { logAction: 'Escalated observation', logDetail: `${upd.title} → ${level ? level.label : ''}`, logRemarks: esc.remarks })
-    const targets = Array.from(new Set([...caoIds, ...directorIds, ((coordinatorFor(upd) || {}).id)].filter(Boolean)))
-    await notify(targets, 'Escalation', `Observation escalated — ${upd.title}`, `${level ? level.label : ''}${esc.altDept ? ` · parallel notice: ${esc.altDept}` : ''}`, '#/compliance', esc.remarks)
-    const coord = coordinatorFor(upd)
-    if (coord) await sendEmail(coord.email, `Escalation: ${upd.title}`, `The observation has been escalated. Remarks: ${esc.remarks}`)
-    setEscalateO(null); setView(null); setEsc({ level: 1, remarks: '', altDept: '' })
-    toast('Escalation recorded and stakeholders notified')
+    await save('observations', upd, { logAction: 'Escalated observation', logDetail: `${upd.title} → Level ${lvl} (${levelLabel})`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Escalation', mode: 'Manual', contextType: 'Observation', contextId: o.id,
+        auditId: o.auditId, title: o.title, recipients, remark, level: lvl, escalatedTo: levelLabel,
+        link: audit ? `#/audit/${o.auditId}` : '#/compliance',
+        notifyTitle: `Escalated to Level ${lvl}: ${o.title}`,
+        notifyBody: `${audit ? audit.code + ' · ' : ''}${levelLabel}${ad ? ` · parallel notice: ${ad}` : ''} — by ${currentUser.name}.`
+      }
+    )
+    setEscalateO(null); setView(upd); setAltDept('')
+    toast('Escalation recorded, stakeholders notified and logged')
   }
 
   const doResolve = async () => {
@@ -111,8 +125,11 @@ export default function Compliance() {
     { key: 'open', label: 'Open', count: data.observations.filter((o) => o.status !== 'Resolved').length },
     { key: 'escalated', label: 'Escalated', count: stats.escalated },
     { key: 'resolved', label: 'Resolved', count: stats.resolved },
-    { key: 'all', label: 'All', count: stats.total }
+    { key: 'all', label: 'All', count: stats.total },
+    { key: 'log', label: 'Communication Log', count: myLogs.length }
   ]
+
+  const obsLogs = (o) => data.commsLogs.filter((l) => l.contextType === 'Observation' && l.contextId === o.id)
 
   return (
     <div>
@@ -131,56 +148,70 @@ export default function Compliance() {
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
-      <DataTable
-        rows={rows}
-        columns={[
-          {
-            key: 'title', label: 'Observation', sortable: true,
-            render: (o) => (
-              <div style={{ maxWidth: 300 }}>
-                <div className="cell-strong ellipsis" title={o.title}>{o.title}</div>
-                <div className="cell-sub ellipsis" title={o.requirement}>{o.requirement}</div>
-              </div>
-            )
-          },
-          { key: 'departmentId', label: 'Department', sortable: true, sort: (o) => deptName(o.departmentId), render: (o) => <span className="small">{deptName(o.departmentId)}</span> },
-          { key: 'complianceStatus', label: 'Compliance', sortable: true, render: (o) => <Badge kind={o.complianceStatus}>{o.complianceStatus}</Badge> },
-          { key: 'status', label: 'Tracking', sortable: true, render: (o) => <Badge kind={o.status}>{o.status}</Badge> },
-          { key: 'escalationLevel', label: 'Escalation', num: true, sortable: true, sort: (o) => o.escalationLevel || 0, render: (o) => <EscalationBadge level={o.escalationLevel} /> },
-          {
-            key: 'dueDate', label: 'Due Date', sortable: true,
-            render: (o) => (
-              <span className="nowrap small">
-                {fmtDate(o.dueDate)}
-                {daysFromNow(o.dueDate) < 0 && o.status !== 'Resolved' && <span className="badge danger" style={{ marginLeft: 5 }}>late</span>}
-              </span>
-            )
-          },
-          { key: 'remindersSent', label: 'Reminders', num: true, sortable: true, render: (o) => o.remindersSent || 0 },
-          {
-            key: '__actions', label: '', render: (o) => (
-              <div className="row-actions">
-                <button className="btn-icon" title="View details" onClick={() => setView(o)}>👁</button>
-                {can('reminders.send') && o.status !== 'Resolved' && <button className="btn-icon" title="Send reminder" onClick={() => sendReminder(o)}>🔔</button>}
-                {can('observation.escalate') && o.status !== 'Resolved' && (
-                  <button className="btn-icon danger" title="Escalate" onClick={() => { setEscalateO(o); setEsc({ level: Math.min(4, (o.escalationLevel || 0) + 1), remarks: '', altDept: '' }) }}>↑</button>
-                )}
-                {can('observation.resolve') && o.status !== 'Resolved' && <button className="btn-icon" title="Resolve" onClick={() => { setResolveO(o); setResolveNote('') }}>✓</button>}
-              </div>
-            )
-          }
-        ]}
-        searchKeys={['title', 'requirement', 'complianceStatus', 'status', (o) => deptName(o.departmentId)]}
-        searchPlaceholder="Search observations…"
-        filters={[
-          { value: deptF, onChange: setDeptF, options: [{ value: 'all', label: 'All departments' }, ...data.departments.map((d) => ({ value: d.id, label: d.name }))] },
-          { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All compliance statuses' }, ...['Compliant', 'Partially Compliant', 'Non-Compliant', 'Pending'].map((s) => ({ value: s, label: s }))] }
-        ]}
-        rowClick={(o) => setView(o)}
-        csvName="compliance-observations"
-        emptyTitle="No observations here"
-        emptySub="Observations raised on audits appear here for follow-up."
-      />
+      {tab === 'log' ? (
+        <CommsLogTable
+          logs={myLogs}
+          users={data.users}
+          audits={data.audits}
+          csvName="compliance-communication-log"
+          emptySub="Reminders and escalations on observations that concern you or your audits appear here."
+          onRowClick={(l) => {
+            const o = data.observations.find((x) => x.id === l.contextId)
+            if (o) setView(o)
+          }}
+        />
+      ) : (
+        <DataTable
+          rows={rows}
+          columns={[
+            {
+              key: 'title', label: 'Observation', sortable: true,
+              render: (o) => (
+                <div style={{ maxWidth: 300 }}>
+                  <div className="cell-strong ellipsis" title={o.title}>{o.title}</div>
+                  <div className="cell-sub ellipsis" title={o.requirement}>{o.requirement}</div>
+                </div>
+              )
+            },
+            { key: 'departmentId', label: 'Department', sortable: true, sort: (o) => deptName(o.departmentId), render: (o) => <span className="small">{deptName(o.departmentId)}</span> },
+            { key: 'complianceStatus', label: 'Compliance', sortable: true, render: (o) => <Badge kind={o.complianceStatus}>{o.complianceStatus}</Badge> },
+            { key: 'status', label: 'Tracking', sortable: true, render: (o) => <Badge kind={o.status}>{o.status}</Badge> },
+            { key: 'escalationLevel', label: 'Escalation', num: true, sortable: true, sort: (o) => o.escalationLevel || 0, render: (o) => <EscalationBadge level={o.escalationLevel} /> },
+            {
+              key: 'dueDate', label: 'Due Date', sortable: true,
+              render: (o) => (
+                <span className="nowrap small">
+                  {fmtDate(o.dueDate)}
+                  {daysFromNow(o.dueDate) < 0 && o.status !== 'Resolved' && <span className="badge danger" style={{ marginLeft: 5 }}>late</span>}
+                </span>
+              )
+            },
+            { key: 'remindersSent', label: 'Reminders', num: true, sortable: true, render: (o) => o.remindersSent || 0 },
+            {
+              key: '__actions', label: '', render: (o) => (
+                <div className="row-actions">
+                  <button className="btn-icon" title="View details" onClick={() => setView(o)}>👁</button>
+                  {can('reminders.send') && o.status !== 'Resolved' && <button className="btn-icon" title="Send reminder (with remark & recipients)" onClick={() => setRemindO(o)}>🔔</button>}
+                  {can('observation.escalate') && o.status !== 'Resolved' && (
+                    <button className="btn-icon danger" title="Escalate" onClick={() => { setEscalateO(o); setEscLevel(Math.min(4, (o.escalationLevel || 0) + 1)); setAltDept('') }}>↑</button>
+                  )}
+                  {can('observation.resolve') && o.status !== 'Resolved' && <button className="btn-icon" title="Resolve" onClick={() => { setResolveO(o); setResolveNote('') }}>✓</button>}
+                </div>
+              )
+            }
+          ]}
+          searchKeys={['title', 'requirement', 'complianceStatus', 'status', (o) => deptName(o.departmentId)]}
+          searchPlaceholder="Search observations…"
+          filters={[
+            { value: deptF, onChange: setDeptF, options: [{ value: 'all', label: 'All departments' }, ...data.departments.map((d) => ({ value: d.id, label: d.name }))] },
+            { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All compliance statuses' }, ...['Compliant', 'Partially Compliant', 'Non-Compliant', 'Pending'].map((s) => ({ value: s, label: s }))] }
+          ]}
+          rowClick={(o) => setView(o)}
+          csvName="compliance-observations"
+          emptyTitle="No observations here"
+          emptySub="Observations raised on audits appear here for follow-up."
+        />
+      )}
 
       {/* view observation */}
       <Modal open={!!view} onClose={() => setView(null)} title={view ? view.title : ''} sub={view ? `${deptName(view.departmentId)} · ${view.requirement}` : ''} size="lg">
@@ -207,6 +238,9 @@ export default function Compliance() {
                 <span className="bold">Resolution: </span>{view.resolutionNote}
               </div>
             )}
+            <div className="mb-3">
+              <CommsHistory logs={obsLogs(view)} users={data.users} />
+            </div>
             <SectionTitle>Follow-up History</SectionTitle>
             <div className="timeline">
               {(view.history || []).map((h, i) => (
@@ -218,9 +252,9 @@ export default function Compliance() {
               ))}
             </div>
             <div className="flex mt-3" style={{ gap: 8, flexWrap: 'wrap' }}>
-              {can('reminders.send') && view.status !== 'Resolved' && <button className="btn btn-secondary" onClick={() => sendReminder(view)}>🔔 Send Reminder</button>}
+              {can('reminders.send') && view.status !== 'Resolved' && <button className="btn btn-secondary" onClick={() => setRemindO(view)}>🔔 Send Reminder</button>}
               {can('observation.escalate') && view.status !== 'Resolved' && (
-                <button className="btn btn-danger" onClick={() => { setEscalateO(view); setEsc({ level: Math.min(4, (view.escalationLevel || 0) + 1), remarks: '', altDept: '' }) }}>↑ Escalate</button>
+                <button className="btn btn-danger" onClick={() => { setEscalateO(view); setEscLevel(Math.min(4, (view.escalationLevel || 0) + 1)); setAltDept('') }}>↑ Escalate</button>
               )}
               {can('observation.resolve') && view.status !== 'Resolved' && <button className="btn btn-success" onClick={() => { setResolveO(view); setResolveNote('') }}>✓ Resolve</button>}
             </div>
@@ -228,44 +262,41 @@ export default function Compliance() {
         )}
       </Modal>
 
-      {/* escalate modal */}
-      <Modal
-        open={!!escalateO} onClose={() => setEscalateO(null)} title="Escalate Observation" sub={escalateO ? escalateO.title : ''} size="md"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setEscalateO(null)}>Cancel</button>
-            <button className="btn btn-danger" disabled={!esc.remarks.trim()} onClick={doEscalate}>Escalate</button>
-          </>
-        }
-      >
-        <div className="flex-col" style={{ gap: 12 }}>
-          <div className="field">
-            <label>Escalation level <span className="req">*</span> <InfoTip text="Choose the authority who should intervene. You can escalate within the same level to another department, or go to a higher level." /></label>
-            <div className="flex-col" style={{ gap: 7 }}>
-              {ESCALATION_LEVELS.map((l) => (
-                <label key={l.level} className="check-item" style={{ cursor: 'pointer', borderColor: Number(esc.level) === l.level ? 'var(--thistle-500)' : undefined }}>
-                  <input type="radio" name="esc-l" checked={Number(esc.level) === l.level} onChange={() => setEsc((e) => ({ ...e, level: l.level }))} style={{ accentColor: 'var(--thistle-500)' }} />
-                  <div>
-                    <div className="bold small">{l.label}</div>
-                    <div className="muted tiny">{l.desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <label>Parallel notice to another department (optional)</label>
-            <select className="select" value={esc.altDept} onChange={(e) => setEsc((x) => ({ ...x, altDept: e.target.value }))}>
-              <option value="">Not applicable</option>
-              {data.departments.filter((d) => d.id !== (escalateO || {}).departmentId).map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Remarks <span className="req">*</span></label>
-            <textarea className="textarea wide" value={esc.remarks} onChange={(e) => setEsc((x) => ({ ...x, remarks: e.target.value }))} placeholder="Why this is being escalated - included in the notification" />
-          </div>
-        </div>
-      </Modal>
+      {/* reminder modal — remark + role-based recipients */}
+      <CommsActionModal
+        open={!!remindO} onClose={() => setRemindO(null)}
+        kind="Reminder" onSend={sendReminder}
+        currentUser={currentUser} users={data.users}
+        audit={remindO ? auditOf(remindO) : null}
+        coordinatorId={remindO ? ((coordinatorFor(remindO) || {}).id || null) : null}
+        contextTitle={remindO ? remindO.title : ''}
+        contextSub={remindO ? `${auditOf(remindO) ? auditOf(remindO).code + ' · ' : ''}${deptName(remindO.departmentId)}` : ''}
+        dueLabel={remindO ? fmtDate(remindO.dueDate) : ''}
+        initialGroups={['coord']}
+      />
+
+      {/* escalate modal — level + remark + role-based recipients */}
+      <CommsActionModal
+        open={!!escalateO} onClose={() => setEscalateO(null)}
+        kind="Escalation" onSend={doEscalate}
+        currentUser={currentUser} users={data.users}
+        audit={escalateO ? auditOf(escalateO) : null}
+        coordinatorId={escalateO ? ((coordinatorFor(escalateO) || {}).id || null) : null}
+        contextTitle={escalateO ? escalateO.title : ''}
+        contextSub={escalateO ? `${auditOf(escalateO) ? auditOf(escalateO).code + ' · ' : ''}${deptName(escalateO.departmentId)}` : ''}
+        dueLabel={escalateO ? fmtDate(escalateO.dueDate) : ''}
+        initialLevel={escLevel}
+        initialGroups={['coord', 'role:cao']}
+        levelDefaults={{
+          1: ['coord', 'role:cao'],
+          2: ['coord', 'role:cao'],
+          3: ['role:director', 'role:cao'],
+          4: ['role:director', 'role:admin', 'role:cao']
+        }}
+        altDeptOptions={data.departments.filter((d) => d.id !== ((escalateO || {}).departmentId)).map((d) => ({ id: d.id, name: d.name }))}
+        altDeptValue={altDept}
+        onAltDeptChange={setAltDept}
+      />
 
       {/* resolve modal */}
       <Modal

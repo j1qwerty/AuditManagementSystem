@@ -49,14 +49,17 @@ Password for every account: **demo123** (configurable, see `.env`). The sign-in 
 | **Dashboard** | Role-aware KPIs, clickable charts and tables, deadlines, pending approvals |
 | **Audit Planning** | Annual plan with full CRUD, quarterly calendar, department risk scoring, resource workload |
 | **Audit Workspace** | 8 tabs — Overview, Checklist (template library + custom), Evidence (upload/preview/versions), Findings, Observations, Work Papers, Review (with remarks), Discussion |
-| **Compliance Tracking** | Reminders, level 1–4 escalation with remarks, resolution tracking, full history |
+| **Compliance Tracking** | Reminders & level 1–4 escalations — mandatory remarks, role-based recipient selection (audit team, coordinator, roles above/same/below), automatic system reminders & auto-escalation for overdue items, full communication log with role/team-based visibility |
 | **Analytics & Risk** | Trends & projection, risk heatmap, department benchmarking, flagged payment review |
 | **Reports** | Template designer (sections, colours, cover/TOC), draft → review → approve → final workflow, PDF/Word/CSV export |
 | **Teams** | Reusable teams with lead + members, active/inactive, loadable into planning |
 | **Documents** | Version control, inline preview (PDF/image/text/CSV/Word), sharing with notifications |
 | **Messages** | Direct + group conversations with search and role/department filters |
 | **Users & Roles** | User CRUD + an **editable permission matrix** per role |
-| **Activity Log** | Every tracked action + login history with IP, browser and device |
+| **Activity Log** | Every tracked action, reminders & escalations communication log, login history with IP, browser and device |
+| **Project Guide** | Per-page/section/tab reference + 13 workflow documents (short intro, roles, duration, typed steps with tips, printable) |
+
+**Everywhere:** app-wide back button in the topbar (retraces your real visit order across pages), colour-coded notifications with remarks that deep-link to their source, sort/search/filter on every table, hover states on every clickable element.
 
 Every action across the app is recorded in the activity trail and audit timelines; notifications are colour-coded and carry the remarks of the action that triggered them.
 

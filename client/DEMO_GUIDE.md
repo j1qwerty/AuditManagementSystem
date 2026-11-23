@@ -41,10 +41,14 @@ Run `npm install && npm run dev`, open the app, and follow this script. Every st
 - **Findings** → open the unspent-balance finding → type a short response → **Send response**. The finding moves to *Under Review*.
 - **Compliance Tracking** → show the ageing column and overdue items.
 
-## 6. Compliance tracking & escalation (1 min)
+## 6. Compliance tracking, reminders & escalation (1.5 min)
 - Sign in as **Chief Audit Officer**.
-- **Compliance Tracking** → Overview: escalation matrix (L1 HoD → L2 Principal Secretary + Director → L3 CMO inclusion), compliance by department.
-- **Open Observations** tab: click **✉** on an overdue row (reminder → notification + simulated email), then **▲** (escalate → Director notified). Show the bell icon lighting up.
+- **Compliance Tracking** → stat cards (total / open / overdue / escalated / compliance rate) → open an overdue observation with the 👁 icon.
+- Click **🔔 Send Reminder**: pick recipients (department coordinator, audit team, or roles above / same level / below your level), type the **mandatory remark**, send. Say: "every reminder is logged with who sent it, to whom, and why."
+- Open the **bell**: the notification is colour-coded, quotes the remark, and links to the audit workspace.
+- Switch to the **Communication Log** tab — the reminder is there with sender, recipients, remark and time. Filter by Reminder / Escalation and Manual / Automatic (the system also sends automatic reminders for overdue observations and auto-escalates 14+ day overdues).
+- Back on the observation, click **↑ Escalate**: choose Level 1–4 (Department Director → Head of Department → Audit Director → Executive Board), optionally add a parallel notice to another department, add the remark, confirm. The observation moves to Escalated and the entry lands in the log and the Activity Log → **Reminders & Escalations** tab.
+- Tip: the audit workspace **Review** tab and the **Findings Registry** have the same 🔔 reminder with remark + recipients.
 
 ## 7. Analytics & AI with governance (1 min)
 - **Analytics & Risk** → **Trends & Prediction**: the dashed line is the 3-month compliance projection.
@@ -64,8 +68,14 @@ Run `npm install && npm run dev`, open the app, and follow this script. Every st
   - **Settings** → Data & Storage: export full backup JSON, import, reset demo data.
 
 ## 10. Close
-- **Demo Guide** page (sidebar, any role) — the same script lives inside the app.
+- **Project Guide** page (sidebar, Help group) — every page, section and tab explained, plus **Workflows**: ready-to-use workflow documents (short intro, roles, duration, typed steps with tips) that can be printed as PDF handouts.
 - Say: "Everything you saw ran in the browser — IndexedDB for data and files, localStorage for session, zero servers. For production we'd put an auth provider, a database and the real PFMS/e-Office interfaces behind the same UI."
+
+---
+
+### Also worth showing
+- **App-wide back button** — the ← arrow at the left of the topbar retraces the real visit order across pages (not just within one feature). Jump dashboard → audits → an audit → compliance, then click back three times.
+- **Communication log visibility** — sign in as a junior team member: they see only the reminders/escalations on their audits and those addressed to them; the CAO/Director/Admin see everything.
 
 ---
 

@@ -1,8 +1,10 @@
 // Activity Log - complete action trail with quick filters, activity
-// categories, and a login-history view with IP / browser / device tracking.
+// categories, a reminders & escalations communication log, and a login-history
+// view with IP / browser / device tracking.
 import { useMemo, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import { Badge, DataTable, PageHead, Tabs, StatCard, Empty, Modal, KV, Avatar } from '../../components/ui'
+import { CommsLogTable } from '../../components/comms'
 import { fmtDate, fmtDateTime, fmtRelative, groupBy } from '../../lib/utils'
 import { ROLES } from '../../lib/permissions'
 import { exportCSV } from '../../lib/exporters'
@@ -66,7 +68,9 @@ export default function ActivityLog() {
     today: data.activity.filter((a) => new Date(a.timestamp).toDateString() === new Date().toDateString()).length,
     week: data.activity.filter((a) => Date.now() - new Date(a.timestamp) < 7 * 86400000).length,
     logins: data.loginEvents.length,
-    failed: data.loginEvents.filter((l) => l.status === 'Failed').length
+    failed: data.loginEvents.filter((l) => l.status === 'Failed').length,
+    reminders: data.commsLogs.filter((l) => l.kind === 'Reminder').length,
+    escalations: data.commsLogs.filter((l) => l.kind === 'Escalation').length
   }), [data])
 
   const grouped = useMemo(() => {
@@ -90,17 +94,22 @@ export default function ActivityLog() {
       <div className="grid grid-4 mb-3">
         <StatCard label="Actions Today" value={stats.today} strip="#8b53ac" foot="recorded in the trail" />
         <StatCard label="Actions This Week" value={stats.week} strip="#0488fb" />
-        <StatCard label="Sign-ins Recorded" value={stats.logins} strip="#0f9d6e" onClick={() => setTab('logins')} foot="click to open sessions" />
-        <StatCard label="Failed Sign-ins" value={stats.failed} strip="#e0364f" onClick={() => setTab('logins')} foot="wrong password attempts" />
+        <StatCard label="Reminders Sent" value={stats.reminders} strip="#d97706" onClick={() => setTab('comms')} foot="manual + automatic" />
+        <StatCard label="Escalations" value={stats.escalations} strip="#e0364f" onClick={() => setTab('comms')} foot="manual + automatic" />
       </div>
 
       <Tabs
-        tabs={[{ key: 'all', label: 'Activity Trail', count: data.activity.length }, { key: 'logins', label: 'Login History & Sessions', count: data.loginEvents.length }]}
+        tabs={[
+          { key: 'all', label: 'Activity Trail', count: data.activity.length },
+          { key: 'comms', label: 'Reminders & Escalations', count: data.commsLogs.length },
+          { key: 'logins', label: 'Login History & Sessions', count: data.loginEvents.length }
+        ]}
         active={tab} onChange={setTab}
       />
 
-      <div className="table-toolbar" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderTop: 'none' }}>
-        {tab === 'all' && (
+      {tab !== 'comms' && (
+        <div className="table-toolbar" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderTop: 'none' }}>
+          {tab === 'all' && (
           <div className="flex wrap" style={{ gap: 6 }}>
             {QUICK_FILTERS.map((f) => (
               <button key={f.key} className={`chip ${quick === f.key ? 'active' : ''}`} onClick={() => setQuick(f.key)}>
@@ -126,7 +135,8 @@ export default function ActivityLog() {
           className="btn btn-secondary btn-sm"
           onClick={() => exportCSV('activity-trail', activityRows.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', location: a.location, ip: a.ip || '' })))}
         >⇩ Export View</button>
-      </div>
+        </div>
+      )}
 
       {tab === 'all' && (
         <div className="table-wrap" style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
@@ -163,6 +173,16 @@ export default function ActivityLog() {
             </div>
           ))}
         </div>
+      )}
+
+      {tab === 'comms' && (
+        <CommsLogTable
+          logs={data.commsLogs}
+          users={data.users}
+          audits={data.audits}
+          csvName="reminders-escalations-log"
+          pageSize={12}
+        />
       )}
 
       {tab === 'logins' && (

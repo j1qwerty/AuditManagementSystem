@@ -433,6 +433,54 @@ function buildObservations() {
   })
 }
 
+// ---------------------------------------------------------------- communication log (reminders & escalations)
+// Historical manual + automatic reminders / escalations so the communication
+// log, per-observation histories and notifications have context on first run.
+const COMMS_SPECS = [
+  // [kind, mode, contextType, contextId, auditId, title, fromUserId, recipients, remark, daysAgo, level, escalatedTo]
+  ['Reminder', 'Manual', 'Observation', 'o01', 'a3', 'Open tendering for works above ₹10 lakh', 'u_cao', ['u_coord3'], 'First reminder — tender documents and comparative statements still pending.', 12, 0, ''],
+  ['Reminder', 'Manual', 'Observation', 'o01', 'a3', 'Open tendering for works above ₹10 lakh', 'u_cao', ['u_coord3', 'u_senior1'], 'Second reminder — please depute the EE (Roads) with the tender file this week.', 8, 0, ''],
+  ['Escalation', 'Manual', 'Observation', 'o01', 'a3', 'Open tendering for works above ₹10 lakh', 'u_cao', ['u_coord3', 'u_director'], 'No response despite two reminders; escalating for departmental intervention.', 5, 2, 'Head of Department'],
+  ['Reminder', 'Manual', 'Observation', 'o02', 'a1', 'Surrender of unspent balances before FY close', 'u_cao', ['u_coord1'], 'Utilisation certificates and surrender statements due before the FY closes.', 6, 0, ''],
+  ['Reminder', 'Automatic', 'Observation', 'o03', 'a5', 'DBT uniqueness verification for scholarships', 'system', ['u_senior2'], 'Automatic reminder: response overdue (DBT uniqueness certificates pending with the audit team).', 4, 0, ''],
+  ['Escalation', 'Manual', 'Observation', 'o03', 'a5', 'DBT uniqueness verification for scholarships', 'u_senior2', ['u_cao'], 'Verification pending from our side; escalating to expedite de-duplication data from the department.', 6, 1, 'Department Director'],
+  ['Reminder', 'Manual', 'Observation', 'o06', 'a4', 'Individual user accounts and access control', 'u_cao', ['u_senior3'], 'Please share the user-access matrix extract for the CCTNS review by Friday.', 4, 0, ''],
+  ['Reminder', 'Automatic', 'Observation', 'o06', 'a4', 'Individual user accounts and access control', 'system', ['u_senior3'], 'Automatic reminder: response overdue by 3 days.', 3, 0, ''],
+  ['Reminder', 'Manual', 'Observation', 'o07', 'a12', 'Validity of performance bank guarantees', 'u_senior1', ['u_junior3'], 'Collect the BG validity extension letters from the EE office during the next visit.', 3, 0, ''],
+  ['Escalation', 'Automatic', 'Observation', 'o07', 'a12', 'Validity of performance bank guarantees', 'system', ['u_cao', 'u_director'], 'Automatic escalation: open observation overdue without a compliance response.', 2, 1, 'Department Director'],
+  ['Reminder', 'Manual', 'Observation', 'o09', 'a7', 'Aadhaar seeding for DBT beneficiaries', 'u_cao', ['u_senior3'], 'Closing the audit file — pending Aadhaar seeding reconciliation needs your sign-off.', 5, 0, ''],
+  ['Reminder', 'Manual', 'Finding', 'f21', 'a1', 'Advance of ₹2.10 crore pending adjustment over 18 months with CMOs', 'u_senior1', ['u_coord1'], 'Adjustment certificates from Chief Medical Officers awaited for the pending advances.', 4, 0, ''],
+  ['Reminder', 'Manual', 'Audit', 'a12', 'a12', 'CA-2025-12 · Compliance Audit of Contractor Payments & Bank Guarantees', 'u_senior1', ['u_cao'], 'Work papers submitted — requesting quality review at the earliest.', 2, 0, '']
+]
+
+function buildCommsLogs() {
+  return COMMS_SPECS.map((s, i) => {
+    const [kind, mode, contextType, contextId, auditId, title, fromUserId, recipientIds, remark, daysAgo, level, escalatedTo] = s
+    const from = WORKSPACE_USERS.find((u) => u[0] === fromUserId)
+    return {
+      id: `cl_seed_${i + 1}`,
+      kind,
+      mode,
+      contextType,
+      contextId,
+      auditId,
+      title,
+      fromUserId: fromUserId === 'system' ? 'system' : fromUserId,
+      fromName: fromUserId === 'system' ? 'System' : USER_NAME[fromUserId],
+      fromRole: fromUserId === 'system' ? 'system' : from[3],
+      recipients: recipientIds.map((rid) => {
+        const u = WORKSPACE_USERS.find((x) => x[0] === rid)
+        return { userId: rid, name: USER_NAME[rid], role: u ? u[3] : 'junior' }
+      }),
+      remark,
+      level,
+      escalatedTo,
+      link: contextType === 'Audit' ? `#/audit/${auditId}` : `#/audit/${auditId}`,
+      timestamp: ago(daysAgo, 10 + (i % 6), 15 + ((i * 7) % 40))
+    }
+  })
+}
+
 // ---------------------------------------------------------------- transactions (anomaly screening feed)
 const VENDORS = [
   'Shree Balaji Constructions', 'Jai Bharat Traders', 'Digital India Solutions Pvt Ltd',
@@ -943,7 +991,8 @@ export function buildAllSeedData() {
     teams: buildTeams(),
     loginEvents,
     rolePermissions: defaultRolePermissions(),
-    emailOutbox: buildEmailOutbox()
+    emailOutbox: buildEmailOutbox(),
+    commsLogs: buildCommsLogs()
   }
 }
 

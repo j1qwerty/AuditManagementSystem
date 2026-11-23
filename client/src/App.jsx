@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { DataProvider, useData } from './context/DataContext'
 import { useRoute, navigate, matchPath } from './lib/router'
 import { canModule, ROLES } from './lib/permissions'
+import config from './lib/config'
 import { AppLayout } from './components/layout'
 import { ToastStack, Empty } from './components/ui'
 
@@ -59,15 +60,30 @@ const ROUTES = [
 
 function Router() {
   const path = useRoute()
-  const { session, booted } = useAuth()
-  const { ready, currentUser, toasts } = useData()
+  const { session, booted, invalidateSession } = useAuth()
+  const { ready, currentUser, toasts, data } = useData()
 
   // default redirect
   useEffect(() => {
     if (path === '/' || path === '') {
       navigate(session ? '/dashboard' : '/login')
     }
-  }, [path, session])
+    // a signed-in user never needs the sign-in screen
+    if (path === '/login' && session && currentUser) navigate('/dashboard')
+  }, [path, session, currentUser])
+
+  // A session whose account no longer exists (the local database was reset,
+  // or the user record was removed) is invalidated automatically: the user
+  // lands on the real sign-in page with a notice instead of a dead-end screen.
+  // If the workspace itself could not load any accounts, the sign-in page is
+  // still shown (with a warning there) so the app never blocks on a database
+  // problem - reload heals it.
+  const workspaceLoaded = ready && (data.users.length > 0 || !config.seedDemoData)
+  useEffect(() => {
+    if (booted && ready && session && !currentUser && workspaceLoaded) {
+      invalidateSession('Your session is no longer valid. Please sign in again.')
+    }
+  }, [booted, ready, session, currentUser, workspaceLoaded, invalidateSession])
 
   if (!booted || (session && !ready)) {
     return (
@@ -77,24 +93,15 @@ function Router() {
     )
   }
 
-  if (!session) {
+  // The sign-in screen is always reachable - with a session whose account
+  // cannot be resolved (stale or workspace without accounts) it stays the
+  // landing view; the effect above turns a stale session into a notice.
+  if (!session || !currentUser) {
     return (
       <>
         <Login />
         <ToastStack toasts={toasts} />
       </>
-    )
-  }
-
-  if (!currentUser) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="empty">
-          <div className="t">Session account not found</div>
-          <div className="s">The local database was reset. Please sign in again.</div>
-          <button className="btn btn-primary mt-2" onClick={() => navigate('/login')}>Go to sign in</button>
-        </div>
-      </div>
     )
   }
 

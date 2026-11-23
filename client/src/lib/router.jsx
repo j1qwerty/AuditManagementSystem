@@ -35,6 +35,98 @@ export function useNavigate() {
   return useCallback((to) => navigate(to), [])
 }
 
+/* ==========================================================================
+   App-wide back navigation
+   Every route change pushes the page being left onto a history stack, so the
+   topbar back button can walk back through the real visit order across all
+   pages (not just within one feature).
+   ========================================================================== */
+const MAX_HISTORY = 60
+let backStack = []
+let suppressPush = false
+let lastPath = typeof window !== 'undefined' ? getPath() : '/'
+const navListeners = new Set()
+const emitNav = () => navListeners.forEach((l) => l())
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    const next = getPath()
+    const prev = lastPath
+    lastPath = next
+    if (suppressPush) {
+      suppressPush = false
+      emitNav()
+      return
+    }
+    if (prev && next && prev !== next && prev !== '/' && prev !== '/login') {
+      if (backStack[backStack.length - 1] !== prev) {
+        backStack.push(prev)
+        if (backStack.length > MAX_HISTORY) backStack = backStack.slice(-MAX_HISTORY)
+      }
+    }
+    emitNav()
+  })
+}
+
+// Walk back to the previous page (repeated clicks keep going back).
+export function goBack() {
+  if (!backStack.length) return
+  const target = backStack.pop()
+  suppressPush = true
+  emitNav()
+  if (getPath() === target) return
+  navigate(target)
+}
+
+// Prevent the next route change from pushing onto the back stack
+// (used on login so the pre-logout page is not remembered for the new user).
+export function suppressNextNavPush() {
+  suppressPush = true
+  // safety: never let the flag linger if no navigation follows
+  setTimeout(() => { suppressPush = false }, 1000)
+}
+
+export function canGoBack() {
+  return backStack.length > 0
+}
+
+export function backTarget() {
+  return backStack.length ? backStack[backStack.length - 1] : null
+}
+
+export function resetNavHistory() {
+  backStack = []
+  emitNav()
+}
+
+// React binding: re-renders whenever the history stack changes.
+export function useNavHistory() {
+  const [, force] = useState(0)
+  useEffect(() => {
+    const sub = () => force((x) => x + 1)
+    navListeners.add(sub)
+    return () => navListeners.delete(sub)
+  }, [])
+  return { canBack: backStack.length > 0, target: backStack.length ? backStack[backStack.length - 1] : null, depth: backStack.length }
+}
+
+// Human title for any route (used by the topbar back button tooltip).
+const ROUTE_TITLES = {
+  '/dashboard': 'Dashboard', '/planning': 'Audit Planning', '/audits': 'Audits',
+  '/findings': 'Findings Registry', '/compliance': 'Compliance Tracking',
+  '/analytics': 'Analytics & Risk', '/reports': 'Reports', '/departments': 'Departments',
+  '/teams': 'Teams', '/documents': 'Document Repository', '/messages': 'Messages',
+  '/users': 'Users & Roles', '/activity': 'Activity Log', '/settings': 'Settings',
+  '/profile': 'My Profile', '/guide': 'Project Guide', '/login': 'Sign In'
+}
+export function routeTitle(path) {
+  if (!path) return ''
+  const clean = path.split('?')[0]
+  if (clean.startsWith('/audit/')) return 'Audit Workspace'
+  if (clean.startsWith('/department/')) return 'Department Profile'
+  return ROUTE_TITLES[clean] || clean
+}
+
 // "/audits/:id" matching -> { params, match: bool }
 export function matchPath(pattern, path) {
   const pParts = pattern.split('/').filter(Boolean)

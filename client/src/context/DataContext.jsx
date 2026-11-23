@@ -10,15 +10,16 @@ import idb from '../lib/db'
 import ls from '../lib/storage'
 import config from '../lib/config'
 import { buildAllSeedData } from '../lib/seed'
-import { uid, todayISO, stableIp } from '../lib/utils'
+import { uid, todayISO, stableIp, fmtDate } from '../lib/utils'
 import { canDefault } from '../lib/permissions'
+import { dispatchComms } from '../lib/comms'
 import { useAuth } from './AuthContext'
 
-const SEED_VERSION = '6' // bump to force a fresh seed on machines
+const SEED_VERSION = '7' // bump to force a fresh seed on machines
 const DATA_STORES = [
   'users', 'departments', 'audits', 'findings', 'observations', 'documents', 'messages',
   'notifications', 'activity', 'transactions', 'reports', 'templates', 'integrations',
-  'emailOutbox', 'teams', 'loginEvents', 'rolePermissions', 'checklistTemplates'
+  'emailOutbox', 'teams', 'loginEvents', 'rolePermissions', 'checklistTemplates', 'commsLogs'
 ]
 
 const emptyData = Object.fromEntries(DATA_STORES.map((s) => [s, []]))
@@ -38,28 +39,76 @@ export function DataProvider({ children }) {
   }, [])
 
   // ---------------- boot: seed + load ----------------
+  // Fault tolerant: a single broken object store never aborts the whole boot,
+  // and if the workspace ends up without accounts (e.g. a database that had to
+  // be healed after an upgrade) the seed is retried once before giving up.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const seededVersion = ls.get('seeded_version')
-        const needsSeed =
-          config.seedDemoData &&
-          (seededVersion === null || (config.resetOnVersionChange && seededVersion !== SEED_VERSION))
-        if (needsSeed) {
+        const loadAll = async () => {
+          const loaded = {}
+          await Promise.all(
+            DATA_STORES.map(async (s) => {
+              try {
+                loaded[s] = await idb.getAll(s)
+              } catch (e) {
+                console.warn(`Store "${s}" could not be read`, e)
+                loaded[s] = []
+              }
+            })
+          )
+          return loaded
+        }
+        const runSeed = async () => {
           const seed = buildAllSeedData()
           await idb.clearAll()
           for (const store of Object.keys(seed)) {
-            await idb.bulkPut(store, seed[store])
+            try {
+              await idb.bulkPut(store, seed[store])
+            } catch (e) {
+              console.warn(`Store "${store}" could not be seeded`, e)
+            }
           }
           ls.set('seeded_version', SEED_VERSION)
+          // Verify the seed actually landed before recording it as complete -
+          // a partial seed (schema was still being healed) is retried on the
+          // next boot instead of leaving the workspace half-populated.
+          let complete = true
+          for (const store of Object.keys(seed)) {
+            if (!seed[store].length) continue
+            try {
+              const rows = await idb.getAll(store)
+              if (!rows || rows.length < seed[store].length) { complete = false; break }
+            } catch (e) {
+              complete = false
+              break
+            }
+          }
+          if (complete) ls.set('seed_integrity', SEED_VERSION)
+          else ls.remove('seed_integrity')
+          return complete
         }
-        const loaded = {}
-        await Promise.all(
-          DATA_STORES.map(async (s) => {
-            loaded[s] = await idb.getAll(s)
-          })
-        )
+
+        const seededVersion = ls.get('seeded_version')
+        const seedIncomplete = ls.get('seed_integrity') !== SEED_VERSION
+        const needsSeed =
+          config.seedDemoData &&
+          (seededVersion === null || seedIncomplete ||
+            (config.resetOnVersionChange && seededVersion !== SEED_VERSION))
+        let seededOk = true
+        if (needsSeed) seededOk = await runSeed()
+
+        let loaded = await loadAll()
+
+        // safety net: seeding is on but no accounts made it into the database
+        // (possible on a freshly healed schema) - retry the seed once.
+        if (config.seedDemoData && (loaded.users.length === 0 || !seededOk)) {
+          console.warn('Workspace seed incomplete - retrying the initial seed')
+          await runSeed()
+          loaded = await loadAll()
+        }
+
         if (!cancelled) {
           setData((d) => ({ ...d, ...loaded }))
           setReady(true)
@@ -267,6 +316,96 @@ export function DataProvider({ children }) {
     },
     [broadcast]
   )
+
+  // ---------------- automatic follow-up engine ----------------
+  // Overdue observations automatically receive reminders (coordinator + audit
+  // lead, at most once every 3 days) and open observations overdue by 14+ days
+  // are automatically escalated to level 1 (once). Every automatic action is
+  // written to the communication log, the observation history, the activity
+  // trail and sends notifications - exactly like a manual action would.
+  const autoRanRef = useRef(false)
+  useEffect(() => {
+    if (!ready || autoRanRef.current || !data.observations.length || !data.users.length) return
+    autoRanRef.current = true
+    ;(async () => {
+      const now = Date.now()
+      for (const o of data.observations) {
+        try {
+          if (o.status === 'Resolved') continue
+          const overdueDays = Math.floor((now - new Date(o.dueDate).getTime()) / 86400000)
+          if (overdueDays < 3) continue
+          let current = o
+          const audit = data.audits.find((a) => a.id === o.auditId)
+          const coord = data.users.find((u) => u.role === 'coordinator' && u.departmentId === o.departmentId && u.status === 'Active')
+          const lead = audit ? data.users.find((u) => u.id === audit.leadAuditorId && u.status === 'Active') : null
+          const lastAuto = o.lastAutoReminderAt ? new Date(o.lastAutoReminderAt).getTime() : 0
+
+          // automatic reminder (3-day cooling period)
+          if (now - lastAuto > 3 * 86400000) {
+            const targets = [coord, lead].filter(Boolean).map((u) => ({ userId: u.id, name: u.name, role: u.role, email: u.email }))
+            if (targets.length) {
+              const remark = `Automatic reminder: response overdue by ${overdueDays} days (due ${fmtDate(o.dueDate)}).`
+              await dispatchComms(
+                { save, notify, sendEmail, currentUser: null },
+                {
+                  kind: 'Reminder', mode: 'Automatic', contextType: 'Observation', contextId: o.id,
+                  auditId: o.auditId, title: o.title, recipients: targets, remark,
+                  link: audit ? `#/audit/${o.auditId}` : '#/compliance',
+                  notifyTitle: `Automatic reminder: ${o.title}`,
+                  notifyBody: `${audit ? audit.code + ' · ' : ''}Response overdue by ${overdueDays} days — sent automatically by the system.`,
+                  fromOverride: { userId: 'system', name: 'System', role: 'system' },
+                  email: false
+                }
+              )
+              const upd = {
+                ...current,
+                remindersSent: (current.remindersSent || 0) + 1,
+                lastAutoReminderAt: todayISO(),
+                history: [...(current.history || []), { date: todayISO(), event: `Automatic reminder sent by the system to ${targets.map((t) => t.name).join(', ')} — response overdue by ${overdueDays} days` }]
+              }
+              current = upd
+              await save('observations', upd, { logAction: 'Automatic reminder sent', logDetail: `${o.title} — overdue by ${overdueDays} days`, logRemarks: remark })
+            }
+          }
+
+          // automatic escalation (once, level 1, 14+ days overdue, never escalated)
+          if (overdueDays >= 14 && !o.escalationLevel && !o.autoEscalatedAt) {
+            const escTargets = [coord, ...data.users.filter((u) => ['cao', 'director'].includes(u.role) && u.status === 'Active')]
+              .filter(Boolean)
+              .map((u) => ({ userId: u.id, name: u.name, role: u.role, email: u.email }))
+            const remark = `Automatic escalation: open observation overdue by ${overdueDays} days without a compliance response (due ${fmtDate(o.dueDate)}).`
+            if (escTargets.length) {
+              await dispatchComms(
+                { save, notify, sendEmail, currentUser: null },
+                {
+                  kind: 'Escalation', mode: 'Automatic', contextType: 'Observation', contextId: o.id,
+                  auditId: o.auditId, title: o.title, recipients: escTargets, remark,
+                  level: 1, escalatedTo: 'Department Director',
+                  link: audit ? `#/audit/${o.auditId}` : '#/compliance',
+                  notifyTitle: `Automatic escalation: ${o.title}`,
+                  notifyBody: `${audit ? audit.code + ' · ' : ''}Overdue by ${overdueDays} days — escalated to Level 1 (Department Director) automatically.`,
+                  fromOverride: { userId: 'system', name: 'System', role: 'system' },
+                  email: false
+                }
+              )
+              const upd = {
+                ...current,
+                status: 'Escalated',
+                escalationLevel: 1,
+                escalatedTo: 'Department Director',
+                escalatedAt: todayISO(),
+                escalationRemarks: remark,
+                autoEscalatedAt: todayISO(),
+                history: [...(current.history || []), { date: todayISO(), event: `Automatically escalated to Level 1 (Department Director) — overdue by ${overdueDays} days` }]
+              }
+              await save('observations', upd, { logAction: 'Automatic escalation', logDetail: `${o.title} → Level 1`, logRemarks: remark })
+            }
+          }
+        } catch (e) { /* keep the engine resilient */ }
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, data.observations, data.users, data.audits])
 
   // ---------------- workspace data reset ----------------
   const resetWorkspaceData = useCallback(async () => {

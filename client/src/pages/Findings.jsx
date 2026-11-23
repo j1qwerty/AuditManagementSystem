@@ -3,13 +3,15 @@ import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
 import { navigate, getQuery } from '../lib/router'
 import { Badge, DataTable, PageHead, Modal, SeverityBadge, TypeBadge, StatCard, SectionTitle, EscalationBadge } from '../components/ui'
+import { CommsActionModal, CommsHistory } from '../components/comms'
 import { fmtDate, fmtDateTime, fmtINR, daysFromNow } from '../lib/utils'
+import { dispatchComms } from '../lib/comms'
 
 const CATEGORIES = ['Procurement', 'Compliance', 'Financial Irregularity', 'Performance', 'Fraud', 'IT Security']
 const STATUSES = ['Open', 'Under Review', 'Action Planned', 'Resolved', 'Closed']
 
 export default function Findings() {
-  const { data, save, notify, currentUser, can, toast } = useData()
+  const { data, save, notify, sendEmail, currentUser, can, toast } = useData()
   const q0 = getQuery()
   const [sevF, setSevF] = useState(q0.get('severity') || 'all')
   const [statusF, setStatusF] = useState(q0.get('status') || 'all')
@@ -20,6 +22,7 @@ export default function Findings() {
   const [respondOpen, setRespondOpen] = useState(false)
   const [remarks, setRemarks] = useState('')
   const [statusChange, setStatusChange] = useState(null) // {finding, newStatus}
+  const [remindF, setRemindF] = useState(null) // finding being reminded
 
   const deptName = (id) => (data.departments.find((d) => d.id === id) || {}).name || '—'
 
@@ -42,6 +45,33 @@ export default function Findings() {
 
   const coordinatorFor = (f) => data.users.find((u) => u.role === 'coordinator' && u.departmentId === f.departmentId)
   const caoIds = data.users.filter((u) => u.role === 'cao').map((u) => u.id)
+  const auditOf = (f) => data.audits.find((a) => a.id === f.auditId)
+
+  // ---- manual reminder on a finding: remark + recipients, fully logged ----
+  const sendFindingReminder = async ({ recipients, remark }) => {
+    const f = remindF
+    const audit = auditOf(f)
+    const names = recipients.map((r) => r.name).join(', ')
+    const upd = {
+      ...f,
+      remindersSent: (f.remindersSent || 0) + 1,
+      lastRemindedAt: new Date().toISOString(),
+      responses: [...(f.responses || []), { by: `${currentUser.name} (Audit)`, role: currentUser.role, type: 'Reminder', text: `Reminder sent to ${names} — ${remark}`, date: new Date().toISOString() }]
+    }
+    await save('findings', upd, { logAction: 'Sent reminder', logDetail: `${f.title} → ${names}`, logRemarks: remark })
+    await dispatchComms(
+      { save, notify, sendEmail, currentUser },
+      {
+        kind: 'Reminder', mode: 'Manual', contextType: 'Finding', contextId: f.id,
+        auditId: f.auditId, title: f.title, recipients, remark,
+        link: '#/findings',
+        notifyTitle: `Reminder: ${f.title}`,
+        notifyBody: `${audit ? audit.code + ' · ' : ''}Department response due ${fmtDate(f.dueDate)} — reminder from ${currentUser.name}.`
+      }
+    )
+    setRemindF(null); setView(upd)
+    toast(`Reminder sent to ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'} and recorded in the log`)
+  }
 
   const submitResponse = async () => {
     const coord = coordinatorFor(view)
@@ -113,6 +143,9 @@ export default function Findings() {
             key: '__actions', label: '', render: (f) => (
               <div className="row-actions">
                 <button className="btn-icon" title="View details" onClick={() => setView(f)}>👁</button>
+                {can('reminders.send') && !['Resolved', 'Closed'].includes(f.status) && (
+                  <button className="btn-icon" title="Send reminder (with remark & recipients)" onClick={() => setRemindF(f)}>🔔</button>
+                )}
                 <button className="btn-icon" title="Open audit" onClick={() => navigate(`/audit/${f.auditId}`)}>↗</button>
               </div>
             )
@@ -161,8 +194,18 @@ export default function Findings() {
                 </div>
               ))}
             </div>
+            <div className="mt-3 mb-3">
+              <CommsHistory
+                logs={data.commsLogs.filter((l) => l.contextType === 'Finding' && l.contextId === view.id)}
+                users={data.users}
+                title="Reminders & Escalations on this Finding"
+              />
+            </div>
 
             <div className="flex mt-3" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {can('reminders.send') && !['Resolved', 'Closed'].includes(view.status) && (
+                <button className="btn btn-secondary" onClick={() => setRemindF(view)}>🔔 Send Reminder</button>
+              )}
               {can('finding.respond') && !['Resolved', 'Closed'].includes(view.status) && (
                 <button className="btn btn-primary" onClick={() => { setRespondOpen(true); setResponse('') }}>Submit Department Response</button>
               )}
@@ -194,6 +237,19 @@ export default function Findings() {
           <textarea className="textarea wide" style={{ minHeight: 130 }} value={response} onChange={(e) => setResponse(e.target.value)} placeholder="Action taken or clarification for the audit team…" />
         </div>
       </Modal>
+
+      {/* reminder modal — remark + role-based recipients */}
+      <CommsActionModal
+        open={!!remindF} onClose={() => setRemindF(null)}
+        kind="Reminder" onSend={sendFindingReminder}
+        currentUser={currentUser} users={data.users}
+        audit={remindF ? auditOf(remindF) : null}
+        coordinatorId={remindF ? ((coordinatorFor(remindF) || {}).id || null) : null}
+        contextTitle={remindF ? remindF.title : ''}
+        contextSub={remindF ? `${remindF.auditCode} · ${deptName(remindF.departmentId)}` : ''}
+        dueLabel={remindF ? fmtDate(remindF.dueDate) : ''}
+        initialGroups={['coord']}
+      />
 
       {/* status change with remarks */}
       <Modal

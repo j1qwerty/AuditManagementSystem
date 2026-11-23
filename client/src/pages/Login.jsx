@@ -9,14 +9,18 @@ import { ROLES } from '../lib/permissions'
 import { Avatar } from '../components/ui'
 
 export default function Login() {
-  const { login, loginWithSSO } = useAuth()
-  const { data, toast } = useData()
+  const { login, loginWithSSO, sessionNotice, clearSessionNotice } = useAuth()
+  const { data, toast, ready } = useData()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [ssoBusy, setSsoBusy] = useState(false)
   const [picked, setPicked] = useState(null)
+
+  // workspace could not load any accounts (database still initialising or a
+  // schema that had to be healed). The page stays usable; reload heals it.
+  const dbIssue = ready && config.seedDemoData && data.users.length === 0
 
   const accounts = useMemo(
     () =>
@@ -58,7 +62,7 @@ export default function Login() {
     if (res.ok) {
       toast(`Signed in via ${config.ssoProviderName}`)
       navigate('/dashboard')
-    }
+    } else setError(res.error)
   }
 
   return (
@@ -84,6 +88,20 @@ export default function Login() {
           <h2>Sign in</h2>
           <div className="sub">Use your workspace account to continue</div>
 
+          {sessionNotice && (
+            <div className="login-notice" role="status">
+              <span>{sessionNotice}</span>
+              <button type="button" onClick={clearSessionNotice} aria-label="Dismiss notice">×</button>
+            </div>
+          )}
+
+          {dbIssue && (
+            <div className="login-notice" role="alert">
+              <span>The local database is being set up and no accounts are available yet. Reload the page to finish the initialisation, then sign in.</span>
+              <button type="button" onClick={() => window.location.reload()} aria-label="Reload page">⟳</button>
+            </div>
+          )}
+
           <form onSubmit={submit} className="flex-col" style={{ gap: 12 }}>
             <div className="field">
               <label>Email</label>
@@ -99,7 +117,7 @@ export default function Login() {
             </button>
           </form>
 
-          {config.ssoEnabled && (
+          {config.ssoEnabled && !dbIssue && (
             <>
               <div className="flex mt-3 mb-3" style={{ gap: 12, color: 'var(--text-3)', fontSize: 11.5, fontWeight: 600 }}>
                 <span style={{ flex: 1, borderTop: '1px solid var(--border-2)' }} />
@@ -112,27 +130,29 @@ export default function Login() {
             </>
           )}
 
-          <div className="mt-3" style={{ marginTop: 22 }}>
-            <div className="muted small bold" style={{ marginBottom: 8 }}>Quick access by role</div>
-            <div className="flex-col" style={{ gap: 7 }}>
-              {accounts.map((acc) => (
-                <button
-                  key={acc.role}
-                  type="button"
-                  className={`role-chip ${picked === acc.user.id ? 'selected' : ''}`}
-                  onClick={() => quickLogin(acc)}
-                  disabled={busy}
-                >
-                  <Avatar name={acc.user.name} color={acc.user.avatarColor} />
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div className="rc-name">{acc.user.name}</div>
-                    <div className="rc-role">{ROLES[acc.role].label}</div>
-                  </div>
-                  <span className="muted">→</span>
-                </button>
-              ))}
+          {!dbIssue && (
+            <div className="mt-3" style={{ marginTop: 22 }}>
+              <div className="muted small bold" style={{ marginBottom: 8 }}>Quick access by role</div>
+              <div className="flex-col" style={{ gap: 7 }}>
+                {accounts.map((acc) => (
+                  <button
+                    key={acc.role}
+                    type="button"
+                    className={`role-chip ${picked === acc.user.id ? 'selected' : ''}`}
+                    onClick={() => quickLogin(acc)}
+                    disabled={busy}
+                  >
+                    <Avatar name={acc.user.name} color={acc.user.avatarColor} />
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div className="rc-name">{acc.user.name}</div>
+                      <div className="rc-role">{ROLES[acc.role].label}</div>
+                    </div>
+                    <span className="muted">→</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -48,7 +48,7 @@ export const config = {
   },
 
   dbName: str('DB_NAME', 'ams_db'),
-  dbVersion: num('DB_VERSION', 2),
+  dbVersion: num('DB_VERSION', 3),
   storagePrefix: str('STORAGE_PREFIX', 'ams'),
   syncChannel: str('SYNC_CHANNEL', 'ams-sync'),
 
