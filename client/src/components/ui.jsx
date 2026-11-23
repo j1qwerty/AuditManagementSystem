@@ -369,7 +369,9 @@ export function DataTable({
   emptyTitle = 'Nothing here yet',
   emptySub,
   csvName,               // enable CSV export with this filename
-  compact
+  compact,
+  fixed,                 // table-layout: fixed (column width hints are respected)
+  minWidth               // px - keeps columns readable on narrow screens (scrolls instead)
 }) {
   const [query, setQuery] = useState('')
   const [sortKey, setSortKey] = useState(null)
@@ -455,7 +457,14 @@ export function DataTable({
         </div>
       )}
       <div className="table-scroll">
-        <table className="table" style={compact ? { fontSize: 12 } : undefined}>
+        <table
+          className="table"
+          style={{
+            ...(compact ? { fontSize: 12 } : {}),
+            ...(fixed ? { tableLayout: 'fixed' } : {}),
+            ...(minWidth ? { minWidth } : {})
+          }}
+        >
           <thead>
             <tr>
               {allCols.map((c) => (

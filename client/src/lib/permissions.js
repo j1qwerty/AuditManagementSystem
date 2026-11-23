@@ -66,7 +66,7 @@ export const MODULES = {
   activity: ['admin', 'director'],
   settings: ['admin'],
   profile: ['admin', 'director', 'cao', 'senior', 'junior', 'coordinator'],
-  guide: ['admin']
+  guide: ['admin', 'director', 'cao', 'senior', 'junior', 'coordinator']
 }
 
 // Fine-grained action permissions. Labels are shown in the admin permission

@@ -165,7 +165,9 @@ export function CommsActionModal({
 
         {/* remark */}
         <div className="field">
-          <label>Remarks <span className="req">*</span> <InfoTip text="Mandatory. Recorded in the communication log, the activity trail and shown with the notification." /></label>
+          <label>Remarks <span className="req">*</span> 
+          {/* <InfoTip text="Mandatory. Recorded in the communication log, the activity trail and shown with the notification." /> */}
+          </label>
           <textarea
             className="textarea wide" value={remark} onChange={(e) => setRemark(e.target.value)}
             placeholder={isEsc ? 'Why this is being escalated — included in the notification' : 'What is pending and by when it is needed — included in the notification'}
@@ -205,11 +207,15 @@ export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptyS
         rows={rows}
         columns={[
           {
-            key: 'timestamp', label: 'Sent', sortable: true, width: 110,
+            key: 'remark', label: 'Remark', sortable: false, width: 27,
+            render: (l) => l.remark ? <span className="small" style={{ fontStyle: 'italic', color: 'var(--text-2)' }}>“{l.remark}”</span> : <span className="muted">—</span>
+          },
+          {
+            key: 'timestamp', label: 'Sent', sortable: true, width: 8,
             render: (l) => <span className="small nowrap" title={fmtDateTime(l.timestamp)}>{fmtRelative(l.timestamp)}</span>
           },
           {
-            key: 'kind', label: 'Type', sortable: true, width: 130,
+            key: 'kind', label: 'Type', sortable: true, width: 17,
             render: (l) => (
               <span className="flex" style={{ gap: 5 }}>
                 {l.kind === 'Escalation' ? <Badge kind="Escalated">Escalation</Badge> : <span className="badge warning">Reminder</span>}
@@ -230,7 +236,7 @@ export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptyS
             )
           },
           {
-            key: 'fromName', label: 'From', sortable: true, width: 170,
+            key: 'fromName', label: 'From', sortable: true, width: 12,
             render: (l) => (
               <span className="flex" style={{ gap: 8 }}>
                 <Avatar name={l.fromName} sm color={l.fromRole === 'system' ? 'var(--text-3)' : undefined} />
@@ -242,7 +248,7 @@ export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptyS
             )
           },
           {
-            key: 'recipients', label: 'To', sortable: true, sort: (l) => (l.recipients || []).length, width: 190,
+            key: 'recipients', label: 'To', sortable: true, sort: (l) => (l.recipients || []).length, width: 13,
             render: (l) => (
               <div className="flex" style={{ gap: 6 }}>
                 <AvatarStackMini people={l.recipients || []} users={users} />
@@ -252,10 +258,6 @@ export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptyS
                 </span>
               </div>
             )
-          },
-          {
-            key: 'remark', label: 'Remark', sortable: false,
-            render: (l) => l.remark ? <span className="small" style={{ fontStyle: 'italic', color: 'var(--text-2)' }}>“{l.remark}”</span> : <span className="muted">—</span>
           }
         ]}
         searchKeys={['title', 'remark', 'fromName', 'escalatedTo', (l) => (l.recipients || []).map((r) => r.name).join(' ')]}
@@ -269,6 +271,8 @@ export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptyS
         emptyTitle="No reminders or escalations yet"
         emptySub={emptySub || 'Every manual and automatic reminder and escalation is recorded here with its recipients and remark.'}
         pageSize={pageSize}
+        fixed
+        minWidth={860}
       />
 
       {/* detail modal (when no custom row handler) */}
