@@ -2,16 +2,16 @@
 // developer section (integration + environment) as the last tab.
 import { useMemo, useState, useEffect } from 'react'
 import { useData } from '../../context/DataContext'
-import { PageHead, Tabs, Modal, ConfirmDialog, Badge, SectionTitle, InfoTip, Empty } from '../../components/ui'
+import { PageHead, Tabs, Modal, ConfirmDialog, Badge, SectionTitle, InfoTip, Empty, ExportMenu } from '../../components/ui'
 import { fmtDateTime, fmtBytes, download } from '../../lib/utils'
-import { exportCSV } from '../../lib/exporters'
 import config from '../../lib/config'
 import idb from '../../lib/db'
 import ls from '../../lib/storage'
+import { useTabMemory } from '../../lib/router'
 
 export default function Settings() {
   const { data, exportData, importData, resetWorkspaceData, wipeAllData, toast, save, logActivity } = useData()
-  const [tab, setTab] = useState('general')
+  const [tab, setTab] = useTabMemory('general')
   const [confirm, setConfirm] = useState(null)
   const [restoreOpen, setRestoreOpen] = useState(false)
   const [restoreText, setRestoreText] = useState('')
@@ -41,10 +41,7 @@ export default function Settings() {
     toast('Backup downloaded')
   }
 
-  const exportActivity = () => {
-    exportCSV('activity-log', data.activity.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', ip: a.ip || '' })))
-    toast('Activity log exported')
-  }
+  const activityRows = data.activity.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', ip: a.ip || '' }))
 
   return (
     <div>
@@ -129,7 +126,12 @@ export default function Settings() {
               <div className="flex" style={{ gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn btn-primary" onClick={exportBackup}>⇩ Download Backup</button>
                 <button className="btn btn-secondary" onClick={() => setRestoreOpen(true)}>⇧ Restore from Backup</button>
-                <button className="btn btn-secondary" onClick={exportActivity}>⇩ Export Activity Log</button>
+                <ExportMenu
+                  label="Export Activity Log"
+                  title="Export the activity log — choose format"
+                  name="activity-log"
+                  rows={activityRows}
+                />
               </div>
             </div>
           </div>
@@ -238,7 +240,12 @@ export default function Settings() {
           <div className="card">
             <div className="card-head"><h3>Developer Tools</h3></div>
             <div className="card-pad flex" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-secondary" onClick={() => { exportCSV('transactions', data.transactions.map((t) => ({ ref: t.refNo, dept: t.departmentId, vendor: t.vendor, amount: t.amount, date: t.date, mode: t.mode }))); toast('Transaction feed exported') }}>⇩ Export Transaction Feed</button>
+              <ExportMenu
+                label="Export Transaction Feed"
+                title="Export the transaction feed — choose format"
+                name="transaction-feed"
+                rows={data.transactions.map((t) => ({ ref: t.refNo, dept: t.departmentId, vendor: t.vendor, amount: t.amount, date: t.date, mode: t.mode }))}
+              />
               <button className="btn btn-secondary" onClick={() => { console.log('[AMS] workspace snapshot', JSON.parse(exportData())); toast('Snapshot printed to the browser console') }}>⌨ Log Snapshot to Console</button>
             </div>
           </div>

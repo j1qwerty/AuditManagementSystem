@@ -1,10 +1,10 @@
 // Audit Planning - annual plan, calendar, risk-based selection, resources.
 import { useMemo, useState, useEffect } from 'react'
 import { useData } from '../context/DataContext'
-import { navigate, getQuery } from '../lib/router'
+import { navigate, useTabMemory } from '../lib/router'
 import {
   Badge, DataTable, PageHead, Modal, TypeBadge, Progress, StatCard, Empty,
-  UserPicker, InfoTip, Tabs, Avatar, ConfirmDialog
+  UserPicker, InfoTip, Tabs, Avatar, ConfirmDialog, PrintButton
 } from '../components/ui'
 import { fmtDate, fmtINR, uid, daysBetween } from '../lib/utils'
 import { computeDepartmentRisk } from '../lib/ai'
@@ -16,7 +16,7 @@ const STATUSES = ['Planned', 'Scheduled', 'In Progress', 'Under Review', 'Comple
 
 export default function Planning() {
   const { data, save, remove, currentUser, notify, logActivity, toast, can } = useData()
-  const [tab, setTab] = useState(getQuery().get('tab') || 'plan')
+  const [tab, setTab] = useTabMemory('plan')
   const [editing, setEditing] = useState(null)   // audit object or {new:true}
   const [confirmDel, setConfirmDel] = useState(null)
 
@@ -101,7 +101,10 @@ export default function Planning() {
       <PageHead
         title="Audit Planning"
         sub={`Annual plan FY ${config.fiscalYear} · risk-based selection, scheduling and resource allocation`}
-        actions={can('planning.manage') ? <button className="btn btn-primary" onClick={() => setEditing({ new: true })}>+ Plan New Audit</button> : null}
+        actions={<>
+          {can('planning.manage') && <button className="btn btn-primary" onClick={() => setEditing({ new: true })}>+ Plan New Audit</button>}
+          <PrintButton label="Print" title="Print this view (or save as PDF)" />
+        </>}
       />
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 

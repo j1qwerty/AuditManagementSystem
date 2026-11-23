@@ -1,11 +1,15 @@
 // Project Guide - reference for every page, section and tab, plus workflow
 // documents: each walkthrough has a short intro ("what it is about"), typed
 // steps (navigate / perform / watch / switch role) with tips, and can be
-// printed as a standalone document.
-import { useState } from 'react'
-import { PageHead, Tabs } from '../components/ui'
-import { navigate } from '../lib/router'
+// printed or downloaded as a standalone document.
+import { useMemo, useState } from 'react'
+import { PageHead, Tabs, MenuButton } from '../components/ui'
+import { navigate, useTabMemory } from '../lib/router'
+import { exportWord } from '../lib/exporters'
 import { ROLES, ROLE_ORDER } from '../lib/permissions'
+import { PrinterIcon } from '@solar-icons/react/linear/printer'
+import { DocumentTextIcon } from '@solar-icons/react/linear/document-text'
+import { TableIcon } from '@solar-icons/react/linear/table'
 
 /* ------------------------------------------------------------------ data */
 const PAGES = [
@@ -62,6 +66,108 @@ const STEP_META = {
   observe: { label: 'Watch / Check', cls: 'st-observe' },
   switch: { label: 'Switch role', cls: 'st-switch' },
   info: { label: 'Good to know', cls: 'st-info' }
+}
+
+/* ------------------------------------------------------------------ export helpers
+   One HTML generator (in the app's own pastel palette) is shared by the
+   "download all as PDF" print window and the Word export, so both outputs
+   look exactly like the workflow documents on screen. */
+const escHtml = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+
+const WF_EXPORT_CSS = `
+  body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; font-size: 12px; color: #2b2433; }
+  h1.guide-title { font-size: 22px; color: #543267; margin: 0 0 3px; }
+  .guide-sub { color: #6d627a; font-size: 12px; margin-bottom: 4px; }
+  .guide-meta { color: #8d84a0; font-size: 10.5px; margin-bottom: 20px; }
+  .wf-doc { border: 1px solid #e5dfef; border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; }
+  .wf-doc.first { page-break-before: avoid; }
+  .wf-doc.page-break { page-break-before: always; }
+  .wf-head { border-bottom: 2px solid #f3eef7; padding-bottom: 8px; margin-bottom: 10px; }
+  h2.wf-title { font-size: 16px; color: #543267; margin: 0 0 4px; }
+  .wf-intro { color: #4a4156; font-size: 11.5px; line-height: 1.5; margin: 0; }
+  .chips { margin: 10px 0 4px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 10.5px; font-weight: 600; margin: 0 5px 4px 0; background: #f6f2fa; color: #543267; border: 1px solid #e5dfef; }
+  .panels { display: flex; gap: 10px; margin: 10px 0 12px; }
+  .panel { flex: 1; border: 1px solid #e5dfef; border-radius: 8px; padding: 9px 11px; background: #faf8fd; }
+  .panel .pt { font-weight: 700; font-size: 10.5px; color: #8b53ac; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+  .panel .pb { font-size: 11.5px; color: #4a4156; line-height: 1.5; }
+  .legend { margin: 8px 0 12px; font-size: 10px; color: #8d84a0; }
+  .step { display: flex; gap: 10px; border: 1px solid #e5dfef; border-radius: 8px; padding: 9px 11px; margin-bottom: 7px; break-inside: avoid; }
+  .step .n { width: 22px; height: 22px; border-radius: 7px; background: #8b53ac; color: #ffffff; font-weight: 700; font-size: 11px; text-align: center; line-height: 22px; flex-shrink: 0; }
+  .st { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+  .st-navigate { background: #e6f3ff; color: #025197; }
+  .st-action { background: #f3eef7; color: #543267; }
+  .st-observe { background: #e7f6ef; color: #0b7f58; }
+  .st-switch { background: #ffe5ef; color: #99003b; }
+  .st-info { background: #f6f2fa; color: #5d5266; }
+  .step .tx { font-size: 11.5px; line-height: 1.55; color: #2b2433; margin: 0; }
+  .tip { margin-top: 5px; font-size: 10.5px; color: #8a6d1f; background: #fdf6e7; border: 1px solid #f0e3c0; border-radius: 6px; padding: 4px 8px; }
+  .footer { margin-top: 20px; color: #8d84a0; font-size: 10px; border-top: 1px solid #e5dfef; padding-top: 6px; }
+  @page { margin: 15mm 13mm; }
+`
+
+function flowDocHTML(f, { first = false, pageBreak = false } = {}) {
+  const roleChips = f.roles
+    .map((r) => `<span class="chip" style="background:${((ROLES[r] || {}).color || '#888')}14;color:${(ROLES[r] || {}).color || '#888'};border-color:transparent">${escHtml((ROLES[r] || {}).label)}</span>`)
+    .join('')
+  const legend = Object.entries(STEP_META)
+    .map(([, m]) => `<span class="st ${m.cls}" style="margin-right:6px">${m.label}</span>`)
+    .join('')
+  const steps = f.steps
+    .map((s, i) => {
+      const meta = STEP_META[s.t] || STEP_META.info
+      return `<div class="step">
+        <div class="n">${i + 1}</div>
+        <div style="flex:1">
+          <span class="st ${meta.cls}">${meta.label}</span>
+          <p class="tx">${escHtml(s.text)}</p>
+          ${s.tip ? `<div class="tip">Tip: ${escHtml(s.tip)}</div>` : ''}
+        </div>
+      </div>`
+    })
+    .join('')
+  return `<div class="wf-doc${first ? ' first' : ''}${pageBreak ? ' page-break' : ''}">
+    <div class="wf-head">
+      <h2 class="wf-title">${f.icon ? f.icon + ' ' : ''}${escHtml(f.title)}</h2>
+      <p class="wf-intro">${escHtml(f.intro)}</p>
+      <div class="chips">
+        <span class="chip">${escHtml(f.duration)}</span>
+        <span class="chip">${f.steps.length} steps</span>
+        ${roleChips}
+      </div>
+    </div>
+    <div class="panels">
+      <div class="panel"><div class="pt">About this workflow</div><div class="pb">${escHtml(f.about)}</div></div>
+      <div class="panel"><div class="pt">Before you start</div><div class="pb">${escHtml(f.prereq)}</div></div>
+    </div>
+    <div class="legend">Step types: ${legend}</div>
+    ${steps}
+  </div>`
+}
+
+function flowsToHTML(flows) {
+  const docs = flows
+    .map((f, i) => flowDocHTML(f, { first: i === 0, pageBreak: i > 0 }))
+    .join('')
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+  return `<h1 class="guide-title">Audit Management System — Workflow Guide</h1>
+  <div class="guide-sub">${flows.length} workflow documents · step-by-step walkthroughs for every role</div>
+  <div class="guide-meta">Generated from the Project Guide on ${escHtml(today)}</div>
+  ${docs}
+  <div class="footer">Generated by the Audit Management System · Project Guide → Workflows</div>`
+}
+
+function downloadFlowsPDF(flows) {
+  const w = window.open('', '_blank', 'width=940,height=720')
+  if (!w) { alert('Please allow pop-ups for this site to export the PDF.') ; return }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>AMS Workflow Guide</title><style>${WF_EXPORT_CSS}</style></head><body>${flowsToHTML(flows)}<script>window.onload=function(){setTimeout(function(){window.print()},350)}</script></body></html>`)
+  w.document.close()
+}
+
+function downloadFlowsWord(flows) {
+  exportWord('AMS-Workflow-Guide', 'AMS Workflow Guide', flowsToHTML(flows), WF_EXPORT_CSS)
 }
 
 const FLOWS = [
@@ -320,8 +426,22 @@ const FLOWS = [
 
 /* ------------------------------------------------------------------ page */
 export default function Guide() {
-  const [tab, setTab] = useState('pages')
+  const [tab, setTab] = useTabMemory('pages')
   const [openFlow, setOpenFlow] = useState(null)
+  const [flowQuery, setFlowQuery] = useState('')
+  const [flowRole, setFlowRole] = useState('all')
+
+  // workflows matching the current search + role filter (the download-all
+  // buttons export exactly this list, so a filter doubles as "export selection")
+  const visibleFlows = useMemo(() => {
+    const q = flowQuery.trim().toLowerCase()
+    return FLOWS.filter((f) => {
+      if (flowRole !== 'all' && !f.roles.includes(flowRole)) return false
+      if (!q) return true
+      const hay = [f.title, f.intro, f.about, f.prereq, ...f.steps.map((s) => `${s.text} ${s.tip || ''}`)].join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }, [flowQuery, flowRole])
 
   return (
     <div>
@@ -361,8 +481,49 @@ export default function Guide() {
       )}
 
       {tab === 'flows' && !openFlow && (
-        <div className="grid grid-2">
-          {FLOWS.map((f) => (
+        <div className="flex-col" style={{ gap: 14 }}>
+          {/* toolbar: search, role filter and the whole-guide downloads */}
+          <div className="card card-pad no-print" style={{ padding: '12px 14px' }}>
+            <div className="flex" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="search-box" style={{ flex: '1 1 220px', minWidth: 200 }}>
+                <input
+                  className="input"
+                  placeholder="Search workflows — title, step or tip text…"
+                  value={flowQuery}
+                  onChange={(e) => setFlowQuery(e.target.value)}
+                />
+              </div>
+              <select className="select" style={{ width: 'auto' }} value={flowRole} onChange={(e) => setFlowRole(e.target.value)}>
+                <option value="all">All roles</option>
+                {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLES[r].label}</option>)}
+              </select>
+              <div style={{ flex: 1 }} />
+              <span className="muted small">
+                {visibleFlows.length} of {FLOWS.length} workflow{FLOWS.length === 1 ? '' : 's'}
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                title="Open a print window with every workflow document — choose “Save as PDF” in the print dialog"
+                onClick={() => downloadFlowsPDF(visibleFlows)}
+              >
+                <PrinterIcon size={14} /> Print all · PDF
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                title="Download every workflow document as a Word file (.doc) with the app's colours"
+                onClick={() => downloadFlowsWord(visibleFlows)}
+              >
+                <DocumentTextIcon size={14} /> Word (.doc)
+              </button>
+            </div>
+          </div>
+
+          {visibleFlows.length === 0 && (
+            <div className="card card-pad center muted">No workflow matches “{flowQuery}”. Try another term or clear the role filter.</div>
+          )}
+
+          <div className="grid grid-2">
+          {visibleFlows.map((f) => (
             <div key={f.id} className="flow-card">
               <div className="card-head" style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                 <h3>{f.icon} {f.title}</h3>
@@ -377,12 +538,22 @@ export default function Guide() {
                     </span>
                   ))}
                 </div>
-                <button className="btn btn-secondary btn-sm mt-2" onClick={() => { setOpenFlow(f); window.scrollTo(0, 0) }}>
-                  Open workflow document →
-                </button>
+                <div className="flex mt-2" style={{ gap: 6 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setOpenFlow(f); window.scrollTo(0, 0) }}>
+                    Open workflow document →
+                  </button>
+                  <button
+                    className="btn-icon"
+                    title="Download this workflow as Word (.doc)"
+                    onClick={() => exportWord(`Workflow-${f.title.replace(/[^\w -]/g, '').trim().replace(/\s+/g, '-')}`, f.title, flowsToHTML([f]), WF_EXPORT_CSS)}
+                  >
+                    <DocumentTextIcon size={15} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -421,7 +592,14 @@ function WorkflowDocument({ flow, onBack }) {
         </div>
         <div className="flex no-print" style={{ gap: 6, flexShrink: 0 }}>
           <button className="btn btn-secondary btn-sm" onClick={onBack}>← All workflows</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Print / PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Print this workflow — choose “Save as PDF” in the print dialog">🖨 Print / PDF</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            title="Download this workflow as Word (.doc)"
+            onClick={() => exportWord(`Workflow-${flow.title.replace(/[^\w -]/g, '').trim().replace(/\s+/g, '-')}`, flow.title, flowsToHTML([flow]), WF_EXPORT_CSS)}
+          >
+            <DocumentTextIcon size={14} /> Word
+          </button>
         </div>
       </div>
       <div className="card-pad">

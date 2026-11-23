@@ -2,18 +2,19 @@
 // template management with basic customisation, and PDF/Word/CSV export.
 import { useMemo, useState, useEffect } from 'react'
 import { useData } from '../context/DataContext'
-import { navigate, getQuery } from '../lib/router'
+import { navigate, useTabMemory, getQuery } from '../lib/router'
 import {
-  Badge, DataTable, PageHead, Modal, Tabs, StatCard, ConfirmDialog, InfoTip, Empty, SectionTitle
+  Badge, DataTable, PageHead, Modal, Tabs, StatCard, ConfirmDialog, InfoTip, Empty, SectionTitle, IconActionMenu, MenuButton, PrintButton
 } from '../components/ui'
 import { uid, fmtDate, fmtDateTime } from '../lib/utils'
 import { printDocument, exportWord, tableHTML } from '../lib/exporters'
+import { DocumentTextIcon } from '@solar-icons/react/linear/document-text'
 
 const STATUS_FLOW = ['Draft', 'In Review', 'Approved', 'Final']
 
 export default function Reports() {
   const { data, save, remove, currentUser, notify, can, toast } = useData()
-  const [tab, setTab] = useState(getQuery().get('tab') === 'generate' ? 'reports' : (getQuery().get('tab') || 'reports'))
+  const [tab, setTab] = useTabMemory('reports')
   const [generateOpen, setGenerateOpen] = useState(getQuery().get('tab') === 'generate')
   const [viewReport, setViewReport] = useState(null)
   const [editTemplate, setEditTemplate] = useState(null)
@@ -152,8 +153,13 @@ export default function Reports() {
                 key: '__actions', label: '', render: (r) => (
                   <div className="row-actions">
                     <button className="btn-icon" title="Open report" onClick={() => setViewReport(r)}>👁</button>
-                    <button className="btn-icon" title="Export PDF (print)" onClick={() => exportPdf(r)}>⇩</button>
-                    <button className="btn-icon" title="Export Word" onClick={() => exportDoc(r)}>⇩</button>
+                    <IconActionMenu
+                      title={`Download “${r.title}” — choose format`}
+                      items={[
+                        { label: 'PDF (print / save)', icon: <DocumentTextIcon size={15} />, onClick: () => exportPdf(r) },
+                        { label: 'Word (.doc)', icon: <DocumentTextIcon size={15} />, onClick: () => exportDoc(r) }
+                      ]}
+                    />
                     {can('report.approve') && r.status === 'Draft' && <button className="btn-icon" title="Send for review" onClick={() => { setStatusChange({ report: r, newStatus: 'In Review' }); setRemarks('') }}>➤</button>}
                     {can('report.approve') && r.status === 'In Review' && <button className="btn-icon" title="Approve" onClick={() => { setStatusChange({ report: r, newStatus: 'Approved' }); setRemarks('') }}>✓</button>}
                     {can('report.approve') && r.status === 'Approved' && <button className="btn-icon" title="Mark final" onClick={() => { setStatusChange({ report: r, newStatus: 'Final' }); setRemarks('') }}>✓</button>}
@@ -240,8 +246,15 @@ export default function Reports() {
               ))}
             </div>
             <div className="flex mt-3" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" onClick={() => exportPdf(viewReport)}>⇩ Export PDF</button>
-              <button className="btn btn-secondary" onClick={() => exportDoc(viewReport)}>⇩ Export Word</button>
+              <MenuButton
+                label="Download"
+                title="Download this report — choose format"
+                className="btn-primary"
+                items={[
+                  { label: 'PDF (print / save)', icon: <DocumentTextIcon size={15} />, onClick: () => exportPdf(viewReport) },
+                  { label: 'Word (.doc)', icon: <DocumentTextIcon size={15} />, onClick: () => exportDoc(viewReport) }
+                ]}
+              />
               {can('report.approve') && viewReport.status === 'Draft' && <button className="btn btn-secondary" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'In Review' }); setRemarks('') }}>➤ Send for Review</button>}
               {can('report.approve') && viewReport.status === 'In Review' && <button className="btn btn-success" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'Approved' }); setRemarks('') }}>✓ Approve</button>}
               {can('report.approve') && viewReport.status === 'Approved' && <button className="btn btn-success" onClick={() => { setStatusChange({ report: viewReport, newStatus: 'Final' }); setRemarks('') }}>✓ Mark Final & Issue</button>}

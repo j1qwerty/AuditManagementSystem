@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
 import { navigate, getQuery } from '../lib/router'
-import { Badge, DataTable, PageHead, Modal, SeverityBadge, TypeBadge, StatCard, SectionTitle, EscalationBadge } from '../components/ui'
+import { Badge, DataTable, PageHead, Modal, SeverityBadge, TypeBadge, StatCard, SectionTitle, EscalationBadge, PrintButton } from '../components/ui'
 import { CommsActionModal, CommsHistory } from '../components/comms'
 import { fmtDate, fmtDateTime, fmtINR, daysFromNow } from '../lib/utils'
 import { dispatchComms } from '../lib/comms'
@@ -101,7 +101,11 @@ export default function Findings() {
 
   return (
     <div>
-      <PageHead title="Findings Registry" sub={`${data.findings.length} findings across all audits · full lifecycle tracking with department responses`} />
+      <PageHead
+        title="Findings Registry"
+        sub={`${data.findings.length} findings across all audits · full lifecycle tracking with department responses`}
+        actions={<PrintButton label="Print" title="Print this view (or save as PDF)" />}
+      />
 
       <div className="grid grid-4 mb-3">
         <StatCard label="Open Findings" value={counts.open} strip="#8b53ac" onClick={() => { setStatusF('all'); setSevF('all') }} foot="all severities" />

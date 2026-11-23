@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
 import { navigate, getQuery } from '../lib/router'
-import { Badge, DataTable, PageHead, Progress, TypeBadge, StatCard } from '../components/ui'
+import { Badge, DataTable, PageHead, Progress, TypeBadge, StatCard, PrintButton } from '../components/ui'
 import { fmtDate, daysFromNow, fmtINRCompact } from '../lib/utils'
 import { suggestedProgress } from '../lib/ai'
 
@@ -80,7 +80,10 @@ export default function Audits() {
       <PageHead
         title="Audits"
         sub={`${data.audits.length} engagements in the registry · FY ${data.audits[0] ? data.audits[0].fiscalYear : ''}`}
-        actions={<button className="btn btn-secondary" onClick={() => navigate('/planning?tab=plan')}>Open in Planning</button>}
+        actions={<>
+          <button className="btn btn-secondary" onClick={() => navigate('/planning?tab=plan')}>Open in Planning</button>
+          <PrintButton label="Print" title="Print this registry (or save as PDF)" />
+        </>}
       />
       <div className="grid grid-4 mb-3">
         <StatCard label="In Progress" value={counts.inProgress} strip="#d97706" onClick={() => setStatusF('In Progress')} foot="field work ongoing" />

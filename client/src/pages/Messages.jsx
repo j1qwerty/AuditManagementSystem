@@ -6,10 +6,11 @@ import { useData } from '../context/DataContext'
 import { PageHead, Tabs, Avatar, AvatarStack, Empty, Modal, UserPicker, Badge } from '../components/ui'
 import { fmtRelative, fmtDateTime, uid, groupBy } from '../lib/utils'
 import { ROLES } from '../lib/permissions'
+import { useTabMemory } from '../lib/router'
 
 export default function Messages() {
   const { data, save, notify, currentUser, unreadThreads, toast, can } = useData()
-  const [tab, setTab] = useState('all')
+  const [tab, setTab] = useTabMemory('all')
   const [activeThread, setActiveThread] = useState(null)
   const [q, setQ] = useState('')
   const [newOpen, setNewOpen] = useState(false)

@@ -48,6 +48,48 @@ let lastPath = typeof window !== 'undefined' ? getPath() : '/'
 const navListeners = new Set()
 const emitNav = () => navListeners.forEach((l) => l())
 
+/* ==========================================================================
+   Per-page UI state memory (active tab, scroll position…)
+   Pages remember where the user last was, so pressing Back returns not just
+   to the right page but to the right tab and scroll offset. Keyed by path
+   without query string; entries live for the whole session.
+   ========================================================================== */
+const pageState = new Map()
+
+function cleanPathOf(path) {
+  return String(path || '').split('?')[0] || '/'
+}
+
+export function setPageState(path, patch) {
+  const key = cleanPathOf(path)
+  pageState.set(key, { ...(pageState.get(key) || {}), ...(patch || {}) })
+}
+
+export function getPageState(path) {
+  return pageState.get(cleanPathOf(path)) || {}
+}
+
+export function clearPageState(path) {
+  pageState.delete(cleanPathOf(path))
+}
+
+// Tab state with memory: picks up the last tab the user had open on this
+// page. A ?tab=… query parameter (deep links from notifications) wins over
+// the memory, which wins over the page default.
+export function useTabMemory(defaultTab) {
+  const path = useRoute()
+  const [tab, setTab] = useState(() => {
+    const q = getQuery().get('tab')
+    if (q) return q
+    const remembered = getPageState(getPath()).tab
+    return remembered === undefined ? defaultTab : remembered
+  })
+  useEffect(() => {
+    setPageState(path, { tab })
+  }, [tab, path])
+  return [tab, setTab]
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => {
     const next = getPath()
@@ -59,6 +101,8 @@ if (typeof window !== 'undefined') {
       return
     }
     if (prev && next && prev !== next && prev !== '/' && prev !== '/login') {
+      // remember where the user was on the page being left (scroll offset)
+      setPageState(prev, { scroll: window.scrollY || 0 })
       if (backStack[backStack.length - 1] !== prev) {
         backStack.push(prev)
         if (backStack.length > MAX_HISTORY) backStack = backStack.slice(-MAX_HISTORY)
@@ -69,13 +113,20 @@ if (typeof window !== 'undefined') {
 }
 
 // Walk back to the previous page (repeated clicks keep going back).
+// The destination's remembered tab and scroll offset are restored so Back
+// lands exactly where the user left off.
 export function goBack() {
   if (!backStack.length) return
   const target = backStack.pop()
+  const restoreScroll = getPageState(target).scroll || 0
   suppressPush = true
   emitNav()
   if (getPath() === target) return
   navigate(target)
+  // re-apply after the page (and its remembered tab) have rendered
+  const apply = () => window.scrollTo({ top: restoreScroll })
+  setTimeout(apply, 90)
+  setTimeout(apply, 260)
 }
 
 // Prevent the next route change from pushing onto the back stack

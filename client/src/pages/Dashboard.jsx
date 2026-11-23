@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { useData } from '../context/DataContext'
 import { navigate, Link } from '../lib/router'
-import { Badge, PageHead, StatCard, Progress, Empty, SeverityBadge, TypeBadge, Avatar } from '../components/ui'
+import { Badge, PageHead, StatCard, Progress, Empty, SeverityBadge, TypeBadge, Avatar, PrintButton } from '../components/ui'
 import { DonutChart, HBarChart, LineChart, Sparkline } from '../components/charts'
 import { fmtDate, fmtRelative, daysFromNow, fmtINRCompact, groupBy } from '../lib/utils'
 import { ROLES } from '../lib/permissions'
@@ -114,9 +114,12 @@ export default function Dashboard() {
       <PageHead
         title={`${greet}, ${currentUser.name.split(' ')[0]}`}
         sub={`${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · FY ${config.fiscalYear} · ${ROLES[role].label}`}
-        actions={quickActions.map((a) => (
-          <button key={a.label} className="btn btn-secondary" onClick={() => navigate(a.to)}>{a.label}</button>
-        ))}
+        actions={<>
+          {quickActions.map((a) => (
+            <button key={a.label} className="btn btn-secondary" onClick={() => navigate(a.to)}>{a.label}</button>
+          ))}
+          <PrintButton label="Print" title="Print this dashboard (or save as PDF)" />
+        </>}
       />
 
       {/* ---------------- KPI cards ---------------- */}

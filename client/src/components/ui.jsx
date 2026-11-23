@@ -3,7 +3,99 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { initials, cx, fileKind, fmtBytes } from '../lib/utils'
 import idb from '../lib/db'
 import { navigate } from '../lib/router'
-import { exportCSV } from '../lib/exporters'
+import { exportCSV, exportXLSX } from '../lib/exporters'
+import { DownloadIcon } from '@solar-icons/react/linear/download'
+import { PrinterIcon } from '@solar-icons/react/linear/printer'
+import { FileTextIcon } from '@solar-icons/react/linear/file-text'
+import { TableIcon } from '@solar-icons/react/linear/table'
+
+// ---------- dropdown menu on a small icon button ----------
+// Used wherever several download/print formats share one trigger.
+export function IconActionMenu({ title, items, size = 16, align = 'right' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useClickOutside(() => setOpen(false))
+  return (
+    <div className="dropdown-wrap" ref={ref} style={{ display: 'inline-block' }}>
+      <button
+        className={cx('btn-icon', open && 'is-open')}
+        title={title}
+        aria-label={title}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <DownloadIcon size={size} />
+      </button>
+      {open && (
+        <div className="dropdown" style={align === 'left' ? { left: 0 } : undefined} role="menu">
+          {items.map((it, i) => (
+            <button
+              key={i}
+              className="menu-item"
+              role="menuitem"
+              onClick={() => { setOpen(false); it.onClick && it.onClick() }}
+            >
+              {it.icon || <FileTextIcon size={15} />}
+              <span>{it.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- export menu (CSV / Excel) for any table or result set ----------
+// rows: array of arrays with `headers`, or array of objects (keys = headers).
+export function ExportMenu({ name, rows, headers, label, sheetName, className }) {
+  return (
+    <MenuButton
+      label={label || 'Export'}
+      className={className}
+      items={[
+        { label: 'CSV (.csv)', icon: <FileTextIcon size={15} />, onClick: () => exportCSV(name, rows, headers) },
+        { label: 'Excel (.xlsx)', icon: <TableIcon size={15} />, onClick: () => exportXLSX(name, rows, headers, sheetName) }
+      ]}
+    />
+  )
+}
+
+// ---------- generic labelled dropdown button (used for export menus) ----------
+export function MenuButton({ label, items, className, size = 14, title }) {
+  const [open, setOpen] = useState(false)
+  const ref = useClickOutside(() => setOpen(false))
+  return (
+    <div className="dropdown-wrap" ref={ref} style={{ display: 'inline-block' }}>
+      <button
+        className={cx('btn btn-secondary btn-sm', open && 'is-open', className)}
+        title={title || 'Choose an option'}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <DownloadIcon size={size} /> {label} <span className="muted">▾</span>
+      </button>
+      {open && (
+        <div className="dropdown" role="menu">
+          {items.map((it, i) => (
+            <button key={i} className="menu-item" role="menuitem" onClick={() => { setOpen(false); it.onClick && it.onClick() }}>
+              {it.icon} <span>{it.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- print button ----------
+export function PrintButton({ label = 'Print', title = 'Print this page (or save as PDF)', className, onClick }) {
+  return (
+    <button className={cx('btn btn-secondary btn-sm no-print', className)} title={title} onClick={onClick || (() => window.print())}>
+      <PrinterIcon size={14} /> {label}
+    </button>
+  )
+}
 
 // ---------- status → badge class maps (single source of truth) ----------
 export const STATUS_CLASS = {
@@ -329,15 +421,6 @@ export function DataTable({
     else { setSortKey(col.key); setSortDir(col.num ? 'desc' : 'asc') }
   }
 
-  const doExport = () => {
-    const heads = columns.filter((c) => c.key !== '__actions').map((c) => c.label)
-    const body = sorted.map((r) => columns.filter((c) => c.key !== '__actions').map((c) => {
-      const v = c.sort ? c.sort(r) : r[c.key]
-      return v === null || v === undefined ? '' : String(v)
-    }))
-    exportCSV(csvName, body, heads)
-  }
-
   const allCols = [...columns]
   if (actions) allCols.push({ key: '__actions', label: actionsLabel, width: 10, className: 'right' })
 
@@ -357,7 +440,18 @@ export function DataTable({
           ))}
           <div style={{ flex: 1 }} />
           {toolbarExtra}
-          {csvName && <button className="btn btn-secondary btn-sm" onClick={doExport}>⇩ Export CSV</button>}
+          {csvName && (
+            <ExportMenu
+              label="Export"
+              title="Download — choose format"
+              name={csvName}
+              rows={sorted.map((r) => columns.filter((c) => c.key !== '__actions').map((c) => {
+                const v = c.sort ? c.sort(r) : r[c.key]
+                return v === null || v === undefined ? '' : String(v)
+              }))}
+              headers={columns.filter((c) => c.key !== '__actions').map((c) => c.label)}
+            />
+          )}
         </div>
       )}
       <div className="table-scroll">

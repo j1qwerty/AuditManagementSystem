@@ -3,11 +3,11 @@
 // view with IP / browser / device tracking.
 import { useMemo, useState } from 'react'
 import { useData } from '../../context/DataContext'
-import { Badge, DataTable, PageHead, Tabs, StatCard, Empty, Modal, KV, Avatar } from '../../components/ui'
+import { Badge, DataTable, PageHead, Tabs, StatCard, Empty, Modal, KV, Avatar, ExportMenu } from '../../components/ui'
 import { CommsLogTable } from '../../components/comms'
 import { fmtDate, fmtDateTime, fmtRelative, groupBy } from '../../lib/utils'
 import { ROLES } from '../../lib/permissions'
-import { exportCSV } from '../../lib/exporters'
+import { useTabMemory } from '../../lib/router'
 
 const QUICK_FILTERS = [
   { key: 'all', label: 'All Activity' },
@@ -34,7 +34,7 @@ const ENTITY_GROUP = {
 
 export default function ActivityLog() {
   const { data } = useData()
-  const [tab, setTab] = useState('all')          // all | logins
+  const [tab, setTab] = useTabMemory('all')
   const [quick, setQuick] = useState('all')
   const [userF, setUserF] = useState('all')
   const [dateF, setDateF] = useState('all')
@@ -131,10 +131,12 @@ export default function ActivityLog() {
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
         </select>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => exportCSV('activity-trail', activityRows.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', location: a.location, ip: a.ip || '' })))}
-        >⇩ Export View</button>
+        <ExportMenu
+          label="Export View"
+          title="Export the filtered activity trail — choose format"
+          name="activity-trail"
+          rows={activityRows.map((a) => ({ time: a.timestamp, user: a.userName, action: a.action, entity: `${a.entityType}/${a.entityId}`, details: a.details, remarks: a.remarks || '', location: a.location, ip: a.ip || '' }))}
+        />
         </div>
       )}
 

@@ -4,7 +4,7 @@
 // activity trail and notifications.
 import { useMemo, useState, useEffect } from 'react'
 import { useData } from '../context/DataContext'
-import { navigate } from '../lib/router'
+import { navigate, useTabMemory } from '../lib/router'
 import {
   Badge, DataTable, PageHead, Progress, TypeBadge, SeverityBadge, Modal, ConfirmDialog,
   Empty, KV, Tabs, Avatar, FilePreviewModal, EscalationBadge, SectionTitle, UserPicker
@@ -27,7 +27,7 @@ export const REVIEW_LEVEL_DEFAULTS = {
 export default function AuditDetail({ id }) {
   const { data, save, remove, saveFile, logActivity, notify, can, currentUser, sendEmail, toast } = useData()
   const audit = data.audits.find((a) => a.id === id)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useTabMemory('overview')
   const [previewFile, setPreviewFile] = useState(null)
   const [confirm, setConfirm] = useState(null)
 

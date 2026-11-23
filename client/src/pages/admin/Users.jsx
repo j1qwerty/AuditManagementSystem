@@ -7,10 +7,11 @@ import {
 import { uid, fmtDate, fmtRelative } from '../../lib/utils'
 import { ROLES, ROLE_ORDER, ACTIONS, ACTION_GROUPS } from '../../lib/permissions'
 import config from '../../lib/config'
+import { useTabMemory } from '../../lib/router'
 
 export default function Users() {
   const { data, usersNamed, save, remove, setRolePermissions, currentUser, toast, can, notify } = useData()
-  const [tab, setTab] = useState('users')
+  const [tab, setTab] = useTabMemory('users')
   const [editing, setEditing] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)
   const [roleF, setRoleF] = useState('all')

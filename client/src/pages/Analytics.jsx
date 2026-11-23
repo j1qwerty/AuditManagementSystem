@@ -2,8 +2,8 @@
 // transaction review queue. Charts show details on hover and navigate on click.
 import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
-import { navigate, getQuery } from '../lib/router'
-import { Badge, DataTable, PageHead, Tabs, StatCard, Modal, RemarksBlock, SeverityBadge, InfoTip } from '../components/ui'
+import { navigate, useTabMemory } from '../lib/router'
+import { Badge, DataTable, PageHead, Tabs, StatCard, Modal, RemarksBlock, SeverityBadge, InfoTip, PrintButton } from '../components/ui'
 import { BarChart, HBarChart, LineChart, DonutChart, RiskHeatmap } from '../components/charts'
 import { fmtINR, fmtINRCompact, fmtDate, daysFromNow } from '../lib/utils'
 import { computeDepartmentRisk, detectAnomalies, projectCompliance } from '../lib/ai'
@@ -13,7 +13,7 @@ const REVIEW_THRESHOLD = 20
 
 export default function Analytics() {
   const { data, save, notify, currentUser, can, toast, logActivity } = useData()
-  const [tab, setTab] = useState(getQuery().get('tab') || 'overview')
+  const [tab, setTab] = useTabMemory('overview')
   const [viewTxn, setViewTxn] = useState(null)
   const [reviewAction, setReviewAction] = useState(null) // {flag, action}
   const [remarks, setRemarks] = useState('')
@@ -129,7 +129,10 @@ export default function Analytics() {
       <PageHead
         title="Analytics & Risk"
         sub="Portfolio analytics, department risk scoring and payment anomaly screening"
-        actions={can('risk.recalculate') ? <button className="btn btn-secondary" onClick={async () => { await logActivity('Recalculated risk scores', 'System', 'risk', 'Risk scores recomputed from the analytics module'); toast('Risk scores recalculated') }}>↻ Recalculate Risk</button> : null}
+        actions={<>
+          {can('risk.recalculate') && <button className="btn btn-secondary" onClick={async () => { await logActivity('Recalculated risk scores', 'System', 'risk', 'Risk scores recomputed from the analytics module'); toast('Risk scores recalculated') }}>↻ Recalculate Risk</button>}
+          <PrintButton label="Print" title="Print this view (or save as PDF)" />
+        </>}
       />
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 

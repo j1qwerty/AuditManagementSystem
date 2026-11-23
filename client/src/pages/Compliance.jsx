@@ -6,9 +6,9 @@
 // the observation history, the activity trail and notifications.
 import { useMemo, useState } from 'react'
 import { useData } from '../context/DataContext'
-import { navigate } from '../lib/router'
+import { navigate, useTabMemory } from '../lib/router'
 import {
-  Badge, DataTable, PageHead, Modal, StatCard, Tabs, EscalationBadge, SectionTitle
+  Badge, DataTable, PageHead, Modal, StatCard, Tabs, EscalationBadge, SectionTitle, PrintButton
 } from '../components/ui'
 import { CommsActionModal, CommsLogTable, CommsHistory } from '../components/comms'
 import { fmtDate, fmtDateTime, daysFromNow } from '../lib/utils'
@@ -16,7 +16,7 @@ import { dispatchComms, visibleCommsLogs } from '../lib/comms'
 
 export default function Compliance() {
   const { data, save, notify, sendEmail, currentUser, can, toast } = useData()
-  const [tab, setTab] = useState('open')
+  const [tab, setTab] = useTabMemory('open')
   const [deptF, setDeptF] = useState('all')
   const [statusF, setStatusF] = useState('all')
   const [view, setView] = useState(null)
@@ -136,6 +136,7 @@ export default function Compliance() {
       <PageHead
         title="Compliance Tracking"
         sub="Time-bound follow-up on audit observations — reminders, escalation and resolution with recorded remarks"
+        actions={<PrintButton label="Print" title="Print this view (or save as PDF)" />}
       />
 
       <div className="grid grid-5 mb-3">
