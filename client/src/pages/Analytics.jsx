@@ -119,10 +119,12 @@ export default function Analytics() {
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
-    { key: 'trends', label: 'Trends & Projection' },
     { key: 'risk', label: 'Risk Matrix' },
     { key: 'flagged', label: 'Flagged Payments', count: pendingFlags.length }
   ]
+
+  // the old 'trends' tab is merged into Overview; remap any remembered selection
+  const activeTab = tab === 'trends' ? 'overview' : tab
 
   return (
     <div>
@@ -134,9 +136,9 @@ export default function Analytics() {
           <PrintButton label="Print" title="Print this view (or save as PDF)" />
         </>}
       />
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <Tabs tabs={tabs} active={activeTab} onChange={setTab} />
 
-      {tab === 'overview' && (
+      {activeTab === 'overview' && (
         <div>
           <div className="grid grid-4 mb-3">
             <StatCard label="Audits This Cycle" value={data.audits.length} strip="#8b53ac" foot={`${data.audits.filter((a) => ['Completed', 'Closed'].includes(a.status)).length} completed`} onClick={() => navigate('/audits')} />
@@ -168,46 +170,45 @@ export default function Analytics() {
               </div>
             </div>
           </div>
+
+          {/* trends & projection (was a separate tab) */}
+          <div className="grid grid-2 mt-3">
+            <div className="card">
+              <div className="card-head"><h3>Findings Raised — 6 Months</h3><span className="hint">click a point → findings</span></div>
+              <div className="card-pad">
+                <LineChart data={monthlyFindings} valueLabel="Findings" onItemClick={() => navigate('/findings')} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-head"><h3>Compliance Rate & Projection <InfoTip text="Resolved vs raised observations per month. The dashed segment is a 3-month linear projection." /></h3></div>
+              <div className="card-pad">
+                <LineChart data={complianceProjection} valueLabel="%" height={190} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-head"><h3>Flagged Value by Vendor</h3><span className="hint">payment anomaly screening</span></div>
+              <div className="card-pad">
+                <HBarChart data={vendorFlags} formatValue={(v) => fmtINRCompact(v)} onItemClick={() => setTab('flagged')} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-head"><h3>Department Benchmarking</h3><span className="hint">compliance rate vs open findings</span></div>
+              <div className="card-pad">
+                <HBarChart
+                  data={deptRisk.slice(0, 8).map((r) => ({
+                    label: r.d.code, value: r.score, color: '#0488fb',
+                    rows: [['Risk score', r.score], ['Open findings', data.findings.filter((f) => f.departmentId === r.d.id && !['Resolved', 'Closed'].includes(f.status)).length], ['Resolved obs.', data.observations.filter((o) => o.departmentId === r.d.id && o.status === 'Resolved').length]]
+                  }))}
+                  formatValue={(v) => v}
+                  onItemClick={(d) => navigate(`/department/${(deptRisk.find((r) => r.d.code === d.label) || {}).d.id}`)}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {tab === 'trends' && (
-        <div className="grid grid-2">
-          <div className="card">
-            <div className="card-head"><h3>Findings Raised — 6 Months</h3><span className="hint">click a point → findings</span></div>
-            <div className="card-pad">
-              <LineChart data={monthlyFindings} valueLabel="Findings" onItemClick={() => navigate('/findings')} />
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-head"><h3>Compliance Rate & Projection <InfoTip text="Resolved vs raised observations per month. The dashed segment is a 3-month linear projection." /></h3></div>
-            <div className="card-pad">
-              <LineChart data={complianceProjection} valueLabel="%" height={190} />
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-head"><h3>Flagged Value by Vendor</h3><span className="hint">payment anomaly screening</span></div>
-            <div className="card-pad">
-              <HBarChart data={vendorFlags} formatValue={(v) => fmtINRCompact(v)} onItemClick={() => setTab('flagged')} />
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-head"><h3>Department Benchmarking</h3><span className="hint">compliance rate vs open findings</span></div>
-            <div className="card-pad">
-              <HBarChart
-                data={deptRisk.slice(0, 8).map((r) => ({
-                  label: r.d.code, value: r.score, color: '#0488fb',
-                  rows: [['Risk score', r.score], ['Open findings', data.findings.filter((f) => f.departmentId === r.d.id && !['Resolved', 'Closed'].includes(f.status)).length], ['Resolved obs.', data.observations.filter((o) => o.departmentId === r.d.id && o.status === 'Resolved').length]]
-                }))}
-                formatValue={(v) => v}
-                onItemClick={(d) => navigate(`/department/${(deptRisk.find((r) => r.d.code === d.label) || {}).d.id}`)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'risk' && (
+      {activeTab === 'risk' && (
         <div className="flex-col" style={{ gap: 16 }}>
           <div className="card">
             <div className="card-head"><h3>Audit Risk Heatmap</h3><span className="hint">impact (priority) × likelihood (risk score) — click a cell</span></div>
@@ -236,7 +237,7 @@ export default function Analytics() {
         </div>
       )}
 
-      {tab === 'flagged' && (
+      {activeTab === 'flagged' && (
         <div>
           <div className="flex-between mb-2">
             <div className="muted small">
