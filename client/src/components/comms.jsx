@@ -181,10 +181,14 @@ export function CommsActionModal({
 /* ==========================================================================
    CommsLogTable — searchable log with filters (used on Compliance + Activity)
    ========================================================================== */
-export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptySub, pageSize = 10 }) {
-  const [kindF, setKindF] = useState('all')
+export function CommsLogTable({ logs, users, audits, onRowClick, csvName, emptySub, pageSize = 10, kindF: kindFProp, onKindFChange }) {
+  const [kindFState, setKindFState] = useState('all')
   const [modeF, setModeF] = useState('all')
   const [view, setView] = useState(null)
+
+  // kind filter is controlled when `kindF` is provided (e.g. stat-card shortcuts), otherwise internal
+  const kindF = kindFProp !== undefined ? kindFProp : kindFState
+  const setKindF = onKindFChange || setKindFState
 
   const auditOf = (log) => audits.find((a) => a.id === log.auditId)
   const rows = useMemo(

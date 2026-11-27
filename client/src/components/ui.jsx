@@ -61,7 +61,8 @@ export function ExportMenu({ name, rows, headers, label, sheetName, className })
 }
 
 // ---------- generic labelled dropdown button (used for export menus) ----------
-export function MenuButton({ label, items, className, size = 14, title }) {
+// drop="up" opens the menu above the button (e.g. near the bottom of a modal).
+export function MenuButton({ label, items, className, size = 14, title, drop }) {
   const [open, setOpen] = useState(false)
   const ref = useClickOutside(() => setOpen(false))
   return (
@@ -76,7 +77,7 @@ export function MenuButton({ label, items, className, size = 14, title }) {
         <DownloadIcon size={size} /> {label} <span className="muted">▾</span>
       </button>
       {open && (
-        <div className="dropdown" role="menu">
+        <div className={cx('dropdown', drop === 'up' && 'up')} role="menu">
           {items.map((it, i) => (
             <button key={i} className="menu-item" role="menuitem" onClick={() => { setOpen(false); it.onClick && it.onClick() }}>
               {it.icon} <span>{it.label}</span>

@@ -17,6 +17,7 @@ export default function Reports() {
   const [tab, setTab] = useTabMemory('reports')
   const [generateOpen, setGenerateOpen] = useState(getQuery().get('tab') === 'generate')
   const [viewReport, setViewReport] = useState(null)
+  const [viewTemplate, setViewTemplate] = useState(null)
   const [editTemplate, setEditTemplate] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)
   const [statusChange, setStatusChange] = useState(null)
@@ -181,12 +182,12 @@ export default function Reports() {
       {tab === 'templates' && (
         <div>
           <div className="flex-between mb-2">
-            <div className="muted small">Templates define the sections and styling used when generating reports. <InfoTip text="Customise sections, accent colour, footer text and cover options. Changes apply to newly generated reports." /></div>
+            {/* <div className="muted small">Templates define the sections and styling used when generating reports. <InfoTip text="Customise sections, accent colour, footer text and cover options. Changes apply to newly generated reports." /></div> */}
             {can('report.template') && <button className="btn btn-primary" onClick={() => setEditTemplate({ new: true })}>+ New Template</button>}
           </div>
           <div className="grid grid-3">
             {data.templates.map((t) => (
-              <div key={t.id} className="card card-hover">
+              <div key={t.id} className="card card-hover" style={{ cursor: 'pointer' }} onClick={() => setViewTemplate(t)} title="Open template preview">
                 <div style={{ height: 4, background: t.accent || '#8b53ac' }} />
                 <div className="card-pad">
                   <div className="flex-between">
@@ -200,12 +201,12 @@ export default function Reports() {
                   </div>
                   <div className="flex-between">
                     <span className="muted tiny">{t.showCover ? 'Cover page' : 'No cover'} · {t.showTOC ? 'with contents' : 'no contents'}</span>
-                    {can('report.template') && (
-                      <span className="flex" style={{ gap: 5 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setEditTemplate(t)}>✎ Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => setConfirmDel({ ...t, isTemplate: true })}>Delete</button>
-                      </span>
-                    )}
+                    <span className="flex" style={{ gap: 5 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); setEditTemplate(t) }}>✎ Edit</button>
+                      {can('report.template') && (
+                        <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); setConfirmDel({ ...t, isTemplate: true }) }}>Delete</button>
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -250,6 +251,7 @@ export default function Reports() {
                 label="Download"
                 title="Download this report — choose format"
                 className="btn-primary"
+                drop="up"
                 items={[
                   { label: 'PDF (print / save)', icon: <DocumentTextIcon size={15} />, onClick: () => exportPdf(viewReport) },
                   { label: 'Word (.doc)', icon: <DocumentTextIcon size={15} />, onClick: () => exportDoc(viewReport) }
@@ -280,6 +282,15 @@ export default function Reports() {
           <textarea className="textarea wide" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Included in the workflow history and notifications" />
         </div>
       </Modal>
+
+      {/* template preview */}
+      {viewTemplate && (
+        <TemplatePreviewModal
+          template={viewTemplate}
+          onClose={() => setViewTemplate(null)}
+          onEdit={() => { setViewTemplate(null); setEditTemplate(viewTemplate) }}
+        />
+      )}
 
       {/* template editor */}
       {editTemplate && (
@@ -354,6 +365,31 @@ function GenerateModal({ data, onClose, onSave }) {
           <textarea className="textarea" value={f.summary} onChange={(e) => set('summary', e.target.value)} placeholder="One-paragraph summary shown in the registry…" />
         </div>
       </div>
+    </Modal>
+  )
+}
+
+function TemplatePreviewModal({ template, onClose, onEdit }) {
+  return (
+    <Modal open onClose={onClose} title={template.name} sub={template.type} size="md"
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn btn-primary" onClick={onEdit}>✎ Edit template</button>
+        </>
+      }>
+      <div style={{ height: 4, background: template.accent || '#8b53ac', borderRadius: 4, marginBottom: 12 }} />
+      <p className="muted small" style={{ marginTop: 0 }}>{template.description}</p>
+      <SectionTitle>Sections ({template.sections.length})</SectionTitle>
+      <ol className="small" style={{ margin: '8px 0 14px', paddingLeft: 20, lineHeight: 1.6 }}>
+        {template.sections.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
+      <div className="flex wrap" style={{ gap: 6 }}>
+        <span className="tag">{template.showCover ? 'Cover page' : 'No cover'}</span>
+        <span className="tag">{template.showTOC ? 'With contents' : 'No contents'}</span>
+        <span className="tag">Accent {template.accent || '#8b53ac'}</span>
+      </div>
+      {template.footer && <p className="muted tiny mt-2"><b>Footer:</b> {template.footer}</p>}
     </Modal>
   )
 }

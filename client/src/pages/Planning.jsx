@@ -334,8 +334,8 @@ function CalendarTab({ data }) {
   }
   const switchMode = (nextMode) => {
     setMode(nextMode)
-    // The year view opens at viewport width instead of being squeezed into a page card.
-    setFullscreen(nextMode === 'year')
+    // Switching modes opens the view normally; full screen is opt-in via the button.
+    setFullscreen(false)
   }
   const openMonth = (month, year, day = 1) => {
     jumpTo(month, year, day)

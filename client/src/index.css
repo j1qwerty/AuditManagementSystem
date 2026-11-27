@@ -204,6 +204,7 @@ a:hover { color: var(--thistle-500); }
   border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg);
   z-index: 100; overflow: hidden; max-height: 480px; display: flex; flex-direction: column;
 }
+.dropdown.up { top: auto; bottom: calc(100% + 8px); }
 .dropdown-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 700;

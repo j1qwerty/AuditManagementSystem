@@ -22,7 +22,7 @@ export default function Dashboard() {
     const active = data.audits.filter((a) => ['In Progress', 'Under Review'].includes(a.status))
     const openFindings = data.findings.filter((f) => !['Resolved', 'Closed'].includes(f.status))
     const critical = openFindings.filter((f) => f.severity === 'Critical').length
-    const overdueObs = data.observations.filter((o) => o.status !== 'Resolved' && new Date(o.dueDate) < new Date())
+    const overdueObs = data.observations.filter((o) => o.status !== 'Resolved' && daysFromNow(o.dueDate) < 0)
     const resolvedObs = data.observations.filter((o) => o.status === 'Resolved')
     const complianceRate = data.observations.length ? Math.round((resolvedObs.length / data.observations.length) * 100) : 0
     const pendingReview = data.audits.filter((a) => a.status === 'Under Review')

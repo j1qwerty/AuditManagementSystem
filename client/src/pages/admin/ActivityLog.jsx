@@ -35,6 +35,7 @@ const ENTITY_GROUP = {
 export default function ActivityLog() {
   const { data } = useData()
   const [tab, setTab] = useTabMemory('all')
+  const [commsKind, setCommsKind] = useState('all')
   const [quick, setQuick] = useState('all')
   const [userF, setUserF] = useState('all')
   const [dateF, setDateF] = useState('all')
@@ -94,8 +95,8 @@ export default function ActivityLog() {
       <div className="grid grid-4 mb-3">
         <StatCard label="Actions Today" value={stats.today} strip="#8b53ac" foot="recorded in the trail" />
         <StatCard label="Actions This Week" value={stats.week} strip="#0488fb" />
-        <StatCard label="Reminders Sent" value={stats.reminders} strip="#d97706" onClick={() => setTab('comms')} foot="manual + automatic" />
-        <StatCard label="Escalations" value={stats.escalations} strip="#e0364f" onClick={() => setTab('comms')} foot="manual + automatic" />
+        <StatCard label="Reminders Sent" value={stats.reminders} strip="#d97706" onClick={() => { setTab('comms'); setCommsKind('Reminder') }} foot="manual + automatic" />
+        <StatCard label="Escalations" value={stats.escalations} strip="#e0364f" onClick={() => { setTab('comms'); setCommsKind('Escalation') }} foot="manual + automatic" />
       </div>
 
       <Tabs
@@ -184,6 +185,8 @@ export default function ActivityLog() {
           audits={data.audits}
           csvName="reminders-escalations-log"
           pageSize={12}
+          kindF={commsKind}
+          onKindFChange={setCommsKind}
         />
       )}
 

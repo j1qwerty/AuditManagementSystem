@@ -106,7 +106,7 @@ export default function Documents() {
         actions={can('document.upload') ? <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>+ Upload Document</button> : null}
       />
 
-      <div className="grid grid-4 mb-3">
+      <div className="grid grid-5 mb-3">
         {KINDS.map((k) => (
           <StatCard
             key={k}

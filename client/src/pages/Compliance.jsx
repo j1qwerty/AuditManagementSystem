@@ -20,6 +20,7 @@ export default function Compliance() {
   const [tab, setTab] = useTabMemory('open')
   const [deptF, setDeptF] = useState('all')
   const [statusF, setStatusF] = useState('all')
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [view, setView] = useState(null)
   const [remindO, setRemindO] = useState(null)   // observation being reminded
   const [escalateO, setEscalateO] = useState(null)
@@ -45,7 +46,8 @@ export default function Compliance() {
     return list
       .filter((o) => deptF === 'all' || o.departmentId === deptF)
       .filter((o) => statusF === 'all' || o.complianceStatus === statusF)
-  }, [data.observations, activeTab, deptF, statusF])
+      .filter((o) => !overdueOnly || (o.status !== 'Resolved' && daysFromNow(o.dueDate) < 0))
+  }, [data.observations, activeTab, deptF, statusF, overdueOnly])
 
   const stats = useMemo(() => {
     const total = data.observations.length
@@ -152,15 +154,15 @@ export default function Compliance() {
 
       {hasCompliance && (
         <div className="grid grid-5 mb-3">
-          <StatCard label="Total Observations" value={stats.total} strip="#8b53ac" onClick={() => setTab('all')} foot="raised across all audits" />
-          <StatCard label="Open" value={stats.total - stats.resolved} strip="#d97706" onClick={() => setTab('open')} foot="awaiting compliance" />
-          <StatCard label="Overdue" value={stats.overdue} strip="#e0364f" onClick={() => setTab('open')} foot="past due date" />
-          <StatCard label="Escalated" value={stats.escalated} strip="#cc004e" onClick={() => setTab('escalated')} foot="at department / board level" />
+          <StatCard label="Total Observations" value={stats.total} strip="#8b53ac" onClick={() => { setTab('all'); setOverdueOnly(false) }} foot="raised across all audits" />
+          <StatCard label="Open" value={stats.total - stats.resolved} strip="#d97706" onClick={() => { setTab('open'); setOverdueOnly(false) }} foot="awaiting compliance" />
+          <StatCard label="Overdue" value={stats.overdue} strip="#e0364f" onClick={() => { setTab('open'); setOverdueOnly(true) }} foot="past due date" />
+          <StatCard label="Escalated" value={stats.escalated} strip="#cc004e" onClick={() => { setTab('escalated'); setOverdueOnly(false) }} foot="at department / board level" />
           <StatCard label="Compliance Rate" value={`${stats.rate}%`} strip="#0f9d6e" foot={`${stats.resolved} resolved`} />
         </div>
       )}
 
-      <Tabs tabs={tabs} active={activeTab} onChange={setTab} />
+      <Tabs tabs={tabs} active={activeTab} onChange={(t) => { setTab(t); setOverdueOnly(false) }} />
 
       {activeTab === 'log' ? (
         <CommsLogTable

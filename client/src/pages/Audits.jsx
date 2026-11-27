@@ -18,7 +18,12 @@ export default function Audits() {
   const rows = useMemo(
     () =>
       data.audits
-        .filter((a) => statusF === 'all' || a.status === statusF)
+        .filter((a) => {
+          if (statusF === 'all') return true
+          if (statusF === 'Upcoming') return a.status === 'Planned' || a.status === 'Scheduled'
+          if (statusF === 'Completed+Closed') return a.status === 'Completed' || a.status === 'Closed'
+          return a.status === statusF
+        })
         .filter((a) => typeF === 'all' || a.type === typeF)
         .filter((a) => deptF === 'all' || a.departmentId === deptF),
     [data.audits, statusF, typeF, deptF]
@@ -88,8 +93,8 @@ export default function Audits() {
       <div className="grid grid-4 mb-3">
         <StatCard label="In Progress" value={counts.inProgress} strip="#d97706" onClick={() => setStatusF('In Progress')} foot="field work ongoing" />
         <StatCard label="Under Review" value={counts.review} strip="#8b53ac" onClick={() => setStatusF('Under Review')} foot="awaiting approval" />
-        <StatCard label="Upcoming" value={counts.upcoming} strip="#0488fb" onClick={() => setStatusF('Planned')} foot="planned & scheduled" />
-        <StatCard label="Completed" value={counts.completed} strip="#0f9d6e" onClick={() => setStatusF('Completed')} foot="closed or issued" />
+        <StatCard label="Upcoming" value={counts.upcoming} strip="#0488fb" onClick={() => { setStatusF('Upcoming'); setTypeF('all'); setDeptF('all') }} foot="planned & scheduled" />
+        <StatCard label="Completed" value={counts.completed} strip="#0f9d6e" onClick={() => { setStatusF('Completed+Closed'); setTypeF('all'); setDeptF('all') }} foot="closed or issued" />
       </div>
 
       <DataTable
@@ -98,7 +103,7 @@ export default function Audits() {
         searchKeys={['code', 'title', 'leadAuditorName', (a) => deptName(a.departmentId)]}
         searchPlaceholder="Search audits by code, title, lead or department…"
         filters={[
-          { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All statuses' }, ...['Planned', 'Scheduled', 'In Progress', 'Under Review', 'Completed', 'Closed'].map((s) => ({ value: s, label: s }))] },
+          { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All statuses' }, ...['Planned', 'Scheduled', 'In Progress', 'Under Review', 'Completed', 'Closed'].map((s) => ({ value: s, label: s })), { value: 'Upcoming', label: 'Upcoming (planned & scheduled)' }, { value: 'Completed+Closed', label: 'Completed or Closed' }] },
           { value: typeF, onChange: setTypeF, options: [{ value: 'all', label: 'All types' }, ...['Financial', 'Performance', 'Compliance', 'IT', 'Forensic'].map((t) => ({ value: t, label: t }))] },
           { value: deptF, onChange: setDeptF, options: [{ value: 'all', label: 'All departments' }, ...data.departments.map((d) => ({ value: d.id, label: d.name }))] }
         ]}

@@ -30,7 +30,13 @@ export default function Findings() {
     () =>
       data.findings
         .filter((f) => sevF === 'all' || f.severity === sevF)
-        .filter((f) => statusF === 'all' || f.status === statusF)
+        .filter((f) => {
+          if (statusF === 'all') return true
+          if (statusF === '__open') return !['Resolved', 'Closed'].includes(f.status)
+          if (statusF === '__overdue') return !['Resolved', 'Closed'].includes(f.status) && daysFromNow(f.dueDate) < 0
+          if (statusF === 'Resolved+Closed') return f.status === 'Resolved' || f.status === 'Closed'
+          return f.status === statusF
+        })
         .filter((f) => deptF === 'all' || f.departmentId === deptF)
         .filter((f) => catF === 'all' || f.category === catF),
     [data.findings, sevF, statusF, deptF, catF]
@@ -108,10 +114,10 @@ export default function Findings() {
       />
 
       <div className="grid grid-4 mb-3">
-        <StatCard label="Open Findings" value={counts.open} strip="#8b53ac" onClick={() => { setStatusF('all'); setSevF('all') }} foot="all severities" />
-        <StatCard label="Critical" value={counts.critical} strip="#cc004e" onClick={() => setSevF('Critical')} foot="critical severity, unresolved" />
-        <StatCard label="Overdue" value={counts.overdue} strip="#e0364f" onClick={() => setStatusF('Open')} foot="response window expired" />
-        <StatCard label="Resolved / Closed" value={counts.resolved} strip="#0f9d6e" onClick={() => setStatusF('Resolved')} foot="closed after verification" />
+        <StatCard label="Open Findings" value={counts.open} strip="#8b53ac" onClick={() => { setStatusF('__open'); setSevF('all') }} foot="all severities" />
+        <StatCard label="Critical" value={counts.critical} strip="#cc004e" onClick={() => { setSevF('Critical'); setStatusF('__open') }} foot="critical severity, unresolved" />
+        <StatCard label="Overdue" value={counts.overdue} strip="#e0364f" onClick={() => { setStatusF('__overdue'); setSevF('all') }} foot="response window expired" />
+        <StatCard label="Resolved / Closed" value={counts.resolved} strip="#0f9d6e" onClick={() => { setStatusF('Resolved+Closed'); setSevF('all') }} foot="closed after verification" />
       </div>
 
       <DataTable
@@ -159,7 +165,7 @@ export default function Findings() {
         searchPlaceholder="Search findings…"
         filters={[
           { value: sevF, onChange: setSevF, options: [{ value: 'all', label: 'All severities' }, ...['Critical', 'High', 'Medium', 'Low'].map((s) => ({ value: s, label: s }))] },
-          { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All statuses' }, ...STATUSES.map((s) => ({ value: s, label: s }))] },
+          { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All statuses' }, ...STATUSES.map((s) => ({ value: s, label: s })), { value: '__open', label: 'Open (unresolved)' }, { value: '__overdue', label: 'Overdue' }, { value: 'Resolved+Closed', label: 'Resolved or Closed' }] },
           { value: catF, onChange: setCatF, options: [{ value: 'all', label: 'All categories' }, ...CATEGORIES.map((c) => ({ value: c, label: c }))] },
           { value: deptF, onChange: setDeptF, options: [{ value: 'all', label: 'All departments' }, ...data.departments.map((d) => ({ value: d.id, label: d.name }))] }
         ]}

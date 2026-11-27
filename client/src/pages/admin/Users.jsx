@@ -25,7 +25,7 @@ export default function Users() {
   const rows = useMemo(
     () =>
       usersNamed
-        .filter((u) => roleF === 'all' || u.role === roleF)
+        .filter((u) => roleF === 'all' || (roleF === '__officer' ? ['senior', 'junior'].includes(u.role) : u.role === roleF))
         .filter((u) => statusF === 'all' || u.status === statusF)
         .filter((u) => deptF === 'all' || u.departmentId === deptF),
     [usersNamed, roleF, statusF, deptF]
@@ -87,7 +87,7 @@ export default function Users() {
           <div className="grid grid-4 mb-3">
             <StatCard label="All Users" value={data.users.length} strip="#8b53ac" onClick={() => { setRoleF('all'); setStatusF('all') }} foot="workspace accounts" />
             <StatCard label="Active" value={data.users.filter((u) => u.status === 'Active').length} strip="#0f9d6e" onClick={() => setStatusF('Active')} />
-            <StatCard label="Audit Officers" value={data.users.filter((u) => ['senior', 'junior'].includes(u.role)).length} strip="#0488fb" onClick={() => setRoleF('senior')} foot="senior + junior" />
+            <StatCard label="Audit Officers" value={data.users.filter((u) => ['senior', 'junior'].includes(u.role)).length} strip="#0488fb" onClick={() => setRoleF('__officer')} foot="senior + junior" />
             <StatCard label="Coordinators" value={data.users.filter((u) => u.role === 'coordinator').length} strip="#ff3381" onClick={() => setRoleF('coordinator')} foot="department side" />
           </div>
 
@@ -128,7 +128,7 @@ export default function Users() {
             searchKeys={['name', 'email', 'designation', (u) => ROLES[u.role].label, (u) => deptName(u.departmentId)]}
             searchPlaceholder="Search users…"
             filters={[
-              { value: roleF, onChange: setRoleF, options: [{ value: 'all', label: 'All roles' }, ...ROLE_ORDER.map((r) => ({ value: r, label: ROLES[r].label }))] },
+              { value: roleF, onChange: setRoleF, options: [{ value: 'all', label: 'All roles' }, ...ROLE_ORDER.map((r) => ({ value: r, label: ROLES[r].label })), { value: '__officer', label: 'Audit Officers (senior + junior)' }] },
               { value: statusF, onChange: setStatusF, options: [{ value: 'all', label: 'All statuses' }, { value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }] },
               { value: deptF, onChange: setDeptF, options: [{ value: 'all', label: 'All departments' }, ...data.departments.map((d) => ({ value: d.id, label: d.name }))] }
             ]}
